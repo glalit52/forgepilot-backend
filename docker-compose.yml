@@ -1,0 +1,40 @@
+# Local stack: Postgres + API + a separate worker, in demo mode with simulated execution.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forgepilot
+      POSTGRES_PASSWORD: forgepilot
+      POSTGRES_DB: forgepilot
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgepilot"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment: &env
+      DATABASE_URL: postgres://forgepilot:forgepilot@postgres:5432/forgepilot
+      ROLE: api
+      DEMO_MODE: "true"
+      ALLOW_DEMO_IN_PRODUCTION: "1"
+      COOKIE_SECURE: "true"
+      APP_URL: http://localhost:3000
+      # Local only. Generate a real one with: openssl rand -base64 32
+      VAULT_KEY: bG9jYWwtZGV2LW9ubHktbm90LWEtcmVhbC1rZXktMTIzNA==
+    ports: ["8080:8080"]
+
+  worker:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: *env
+      ROLE: worker
+
+volumes:
+  pgdata:
