@@ -2,6 +2,7 @@
 import { writeFile } from "node:fs/promises";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
+import { connectorStatus } from "./connectors/status";
 import { buildOpenApi } from "./http/openapi";
 import { identityRoutes } from "./identity/routes";
 import { migrate } from "./platform/migrations";
@@ -33,8 +34,22 @@ async function main() {
     await writeFile(process.argv[3] ?? "docs/openapi.json", JSON.stringify(doc, null, 2) + "\n");
     console.log(`Wrote ${Object.keys(doc.paths).length} paths`);
     await app.close();
+  } else if (command === "doctor") {
+    const icon = { ready: "READY  ", partial: "PARTIAL", off: "OFF    " };
+    console.log(
+      `Execution mode: ${config.execution.mode} · demo mode: ${config.demoMode ? "on" : "off"}\n`,
+    );
+    for (const c of connectorStatus(config)) {
+      console.log(`${icon[c.state]} ${c.name}`);
+      if (c.missing.length) console.log(`          missing: ${c.missing.join(", ")}`);
+      if (c.state !== "ready") console.log(`          until then: ${c.whenOff}`);
+    }
+    console.log(
+      "\nPer-workspace connectors (Claude Code, Codex, Slack, Teams, Linear, Jira) are connected by each customer in the app.",
+    );
+    console.log("Setup steps for everything above: docs/CONNECTORS.md");
   } else {
-    console.error("Usage: cli <migrate|seed-demo|openapi [file]>");
+    console.error("Usage: cli <migrate|seed-demo|openapi [file]|doctor>");
     process.exit(2);
   }
 }

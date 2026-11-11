@@ -1818,6 +1818,82 @@
         }
       }
     },
+    "/api/v1/auth/options": {
+      "get": {
+        "summary": "Which sign-in methods this deployment offers, so the web app shows the right screens.",
+        "description": "Access: None.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "demo": {
+                      "type": "boolean"
+                    },
+                    "password": {
+                      "type": "boolean"
+                    },
+                    "github": {
+                      "type": "boolean"
+                    },
+                    "githubSignInUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "githubAppInstallUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "demo",
+                    "password",
+                    "github",
+                    "githubSignInUrl",
+                    "githubAppInstallUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "summary": "Sign in with email and password. Sets the session cookies.",

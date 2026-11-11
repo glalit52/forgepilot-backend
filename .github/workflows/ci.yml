@@ -3,7 +3,11 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -36,3 +40,18 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://fp:fp@localhost:5432/fp
       - run: pnpm build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t forgepilot-backend .
+      # The image must boot on its own: embedded database, demo data, health check.
+      - run: |
+          docker run -d --name fp -p 8080:8080 -e DEMO_MODE=true -e ALLOW_DEMO_IN_PRODUCTION=1 \
+            -e COOKIE_SECURE=true -e VAULT_KEY=$(openssl rand -base64 32) \
+            -e DATABASE_URL=pglite://memory forgepilot-backend
+          for i in $(seq 1 30); do curl -fs localhost:8080/healthz && break || sleep 2; done
+          curl -fs localhost:8080/api/v1/plans > /dev/null
+          docker logs fp | tail -20

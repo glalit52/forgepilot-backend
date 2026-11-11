@@ -21,6 +21,7 @@
     "migrate": "tsx src/cli.ts migrate",
     "seed:demo": "tsx src/cli.ts seed-demo",
     "openapi": "tsx src/cli.ts openapi",
+    "connectors": "tsx src/cli.ts doctor",
     "contract:sync": "node scripts/sync-contract.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },

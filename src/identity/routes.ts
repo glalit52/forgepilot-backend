@@ -268,6 +268,29 @@ export const identityRoutes: GlobalRouteDef[] = [
 
   // ===== real authentication (not part of the demo UI contract)
   {
+    method: "GET",
+    path: "/auth/options",
+    auth: "public",
+    summary:
+      "Which sign-in methods this deployment offers, so the web app shows the right screens.",
+    response: z.object({
+      demo: z.boolean(),
+      password: z.boolean(),
+      github: z.boolean(),
+      githubSignInUrl: z.string().nullable(),
+      githubAppInstallUrl: z.string().nullable(),
+    }),
+    handler: async (ctx) => ({
+      demo: ctx.app.config.demoMode,
+      password: !ctx.app.config.demoMode,
+      github: ctx.app.github.oauthConfigured,
+      githubSignInUrl: ctx.app.github.oauthConfigured
+        ? `${ctx.app.config.publicApiUrl}/auth/github/start`
+        : null,
+      githubAppInstallUrl: ctx.app.github.configured ? ctx.app.github.installUrl : null,
+    }),
+  },
+  {
     method: "POST",
     path: "/auth/login",
     auth: "public",

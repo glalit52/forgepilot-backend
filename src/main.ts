@@ -1,6 +1,7 @@
 /** Process entry point: API and/or workers depending on ROLE, with graceful shutdown. */
 import { createApp } from "./app";
 import { loadConfig } from "./config";
+import { connectorStatus } from "./connectors/status";
 import { buildServer } from "./http/server";
 
 async function main() {
@@ -8,6 +9,12 @@ async function main() {
   const app = await createApp(config);
   const server = config.role === "worker" ? null : await buildServer(app);
   if (server) await server.listen({ host: config.host, port: config.port });
+  for (const c of connectorStatus(config))
+    if (c.state !== "ready")
+      app.log.warn(
+        { connector: c.id, state: c.state, missing: c.missing },
+        `${c.name}: ${c.whenOff}`,
+      );
   app.log.info(
     { role: config.role, execution: config.execution.mode, demo: config.demoMode },
     "forgepilot backend started",

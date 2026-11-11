@@ -89,4 +89,6 @@ Stated plainly so nobody is surprised later:
 
 ## Configuration
 
+To connect your own accounts (database, GitHub App, Stripe, email, agents), follow [`docs/CONNECTORS.md`](docs/CONNECTORS.md) and check progress with `pnpm run connectors`.
+
 Everything is an environment variable, validated at boot. See [`.env.example`](.env.example). Production requires `VAULT_KEY` and `COOKIE_SECURE=true`; `EXECUTION_MODE=live` requires the GitHub App settings.
