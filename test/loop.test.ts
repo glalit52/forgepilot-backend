@@ -151,8 +151,10 @@ describe("closed loop (PRD §10)", () => {
     expect(fix.body.bug.status).toBe("fix_in_progress");
     await waitFor(h, taskStatus(fix.body.bug.taskId, "review_ready"));
     const pr = (await maya.get(`/pull-requests/${failed.task.pullRequestId}`)).body;
-    expect(pr.runs[0].status).toBe("passed");
-    expect(pr.runs[0].retestOf).toBeTruthy();
+    // Runs started within the same second sort arbitrarily, so look the latest one up by id.
+    const latest = pr.runs.find((r: { id: string }) => r.id === pr.pullRequest.latestRunId);
+    expect(latest.status).toBe("passed");
+    expect(latest.retestOf).toBeTruthy();
     expect(pr.bugs.find((b: { status: string }) => b.status === "resolved")).toBeTruthy();
   });
 

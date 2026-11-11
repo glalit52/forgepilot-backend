@@ -7,7 +7,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, {
+  LogController,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 import type { App } from "../app";
 import { verifyGithubSignature } from "../connectors/github";
 import { ConnectorError } from "../connectors/http";
@@ -43,7 +48,7 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
   const { config } = app;
   const server = Fastify({
     loggerInstance: app.log,
-    disableRequestLogging: true,
+    logController: new LogController({ disableRequestLogging: true }),
     trustProxy: true,
     bodyLimit: 2 * 1024 * 1024,
     genReqId: (req) => {
@@ -64,6 +69,8 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
     maxAge: 600,
   });
 
+  // JSON is the only accepted body type; anything else is answered with 415.
+  server.removeAllContentTypeParsers();
   // Keep the exact bytes: webhook signatures are computed over the raw body.
   server.addContentTypeParser("application/json", { parseAs: "buffer" }, (req, body, done) => {
     req.rawBody = body as Buffer;
@@ -108,8 +115,18 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
       (err as { statusCode: number }).statusCode < 500
     ) {
       status = (err as { statusCode: number }).statusCode;
-      message = status === 413 ? "Request body is too large" : (err as Error).message;
-      code = status === 413 ? "payload_too_large" : "bad_request";
+      message =
+        status === 413
+          ? "Request body is too large"
+          : status === 415
+            ? "Send JSON (Content-Type: application/json)"
+            : (err as Error).message;
+      code =
+        status === 413
+          ? "payload_too_large"
+          : status === 415
+            ? "unsupported_media_type"
+            : "bad_request";
     } else req.log.error({ err }, "unhandled error");
     void reply.status(status).send({
       error: message,

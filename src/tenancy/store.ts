@@ -160,11 +160,15 @@ export class TenantStore {
           await q.query(`SELECT pg_notify($1, $2)`, [CHANGE_CHANNEL, this.bus.payload(orgId, rev)]);
         }
         for (const job of jobs) await enqueueJob(q, job);
-        return { result, next };
+        const membersChanged =
+          finalPlan.memberUpserts.length > 0 || finalPlan.memberRemovals.length > 0;
+        return { result, next, membersChanged };
       });
 
       if (outcome.next) {
-        this.put(orgId, outcome.next);
+        // Member names and emails come from the users table, so a membership change reloads the snapshot.
+        if (outcome.membersChanged) this.cache.delete(orgId);
+        else this.put(orgId, outcome.next);
         this.bus.publishLocal({ orgId, rev: outcome.next.rev });
       }
       for (const cb of afterCommit) {

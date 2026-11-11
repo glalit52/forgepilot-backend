@@ -342,11 +342,16 @@ export class ExecutionPlane {
       const changes = await workspace.stagedChanges();
       if (!changes.files.length)
         throw new UserFacingError("The agent finished without changing any files");
+      // An agent must never publish a credential it was given: stop before anything leaves the workspace.
+      if (secrets.some((secret) => changes.diff.includes(secret)))
+        throw new UserFacingError(
+          "Stopped: the change contains a credential that was provided to the session. Nothing was pushed.",
+        );
       await this.saveArtifact(
         orgId,
         "session_diff",
         sessionId,
-        parseUnifiedDiff(changes.diff, true),
+        parseUnifiedDiff(redactSecrets(changes.diff, secrets).text, true),
       );
 
       // Protected paths (PRD §15.4): hold the change until a human with the right role approves it.

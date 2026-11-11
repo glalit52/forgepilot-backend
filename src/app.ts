@@ -40,7 +40,7 @@ export interface AppOverrides {
   fetch?: FetchLike;
   log?: Logger;
   /** Replaces GitHub-backed repository access (tests use a local git remote). */
-  repos?: RepoAccess;
+  repos?: (defaults: RepoAccess) => RepoAccess;
   seed?: MockDb;
   resolveHost?: (host: string) => Promise<string[]>;
 }
@@ -102,9 +102,11 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
   const mailer = new Mailer(config.email, fetchImpl, log);
   const webhooks = new OutboundWebhooks(db, vault, fetchImpl, overrides.resolveHost);
   const trackers = new IssueTrackers(fetchImpl);
-  const repos =
-    overrides.repos ??
-    new GithubRepoAccess(github, new RepoIntel(github, new AdvisoryClient(fetchImpl)));
+  const githubRepos = new GithubRepoAccess(
+    github,
+    new RepoIntel(github, new AdvisoryClient(fetchImpl)),
+  );
+  const repos = overrides.repos ? overrides.repos(githubRepos) : githubRepos;
   const plane = new ExecutionPlane({ config, db, store, repos, credentials, log });
   const githubLive = github.configured;
 

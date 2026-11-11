@@ -5,6 +5,7 @@ import { buildServer } from "../src/http/server";
 import { openDatabase } from "../src/platform/db";
 import { loadSeedFile } from "../src/demo/seed";
 import type { MockDb } from "../src/contract/schemas";
+import { randomId } from "../src/platform/ids";
 
 let seedPromise: Promise<MockDb> | null = null;
 export const demoSeed = () => (seedPromise ??= loadSeedFile("seed/demo-data.json"));
@@ -87,7 +88,7 @@ export async function createHarness(
   const config = loadConfig({
     NODE_ENV: "test",
     LOG_LEVEL: "silent",
-    DATABASE_URL: "pglite://memory",
+    DATABASE_URL: process.env.TEST_DATABASE_URL ?? "pglite://memory",
     ROLE: "api",
     DEMO_MODE: "true",
     RATE_LIMIT_PER_MINUTE: "100000",
@@ -98,7 +99,22 @@ export async function createHarness(
     FP_SIM_INDEX_MS: "10",
     ...env,
   });
-  const db = await openDatabase(config.databaseUrl);
+  // With TEST_DATABASE_URL (a real Postgres), every harness gets its own throwaway database.
+  let dbUrl = config.databaseUrl;
+  let dropDatabase = async () => {};
+  if (!dbUrl.startsWith("pglite:")) {
+    const admin = await openDatabase(dbUrl);
+    const name = `fp_test_${randomId(10)}`;
+    await admin.query(`CREATE DATABASE ${name}`);
+    const url = new URL(dbUrl);
+    url.pathname = `/${name}`;
+    dbUrl = url.toString();
+    dropDatabase = async () => {
+      await admin.query(`DROP DATABASE ${name} WITH (FORCE)`);
+      await admin.close();
+    };
+  }
+  const db = await openDatabase(dbUrl);
   const app = await createApp(config, {
     db,
     seed: config.demoMode ? await demoSeed() : undefined,
@@ -114,6 +130,7 @@ export async function createHarness(
       await server.close();
       await app.close();
       await db.close();
+      await dropDatabase();
     },
   };
 }

@@ -2967,6 +2967,12 @@ export const routes: RouteDef[] = [
       return paymentMethod(ctx);
     },
     handler: (ctx) => {
+      // Without Stripe a plan change is only a simulation, which is fine for the demo and nowhere else.
+      if (!ctx.ports.stripeLive && !ctx.ports.demoMode)
+        throw new HttpError(
+          409,
+          "Billing is not set up for this environment yet, so plans can't be changed.",
+        );
       const { input, target } = validatePlanChange(ctx);
       const o = org(ctx);
       o.plan = input.plan;

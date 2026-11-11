@@ -18,92 +18,92 @@ Guardrails the backend must enforce (not just the UI):
 
 ## Endpoints
 
-| Method | Path                                   | Auth                             | Request                   | Response                   | Summary                                                                                                                                        |
-| ------ | -------------------------------------- | -------------------------------- | ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/session/personas`                    | None                             | —                         | see below                  | Demo personas for the sign-in screen.                                                                                                          |
-| GET    | `/session/status`                      | None                             | —                         | see below                  | Whether the visitor is signed in and has a workspace (used by onboarding before a workspace exists).                                           |
-| GET    | `/session`                             | Any workspace member             | —                         | `SessionInfo`              | Current user, active workspace, role, other workspaces and badge counts.                                                                       |
-| GET    | `/visual-snapshots`                    | Any workspace member             | —                         | `VisualSnapshotListItem[]` | Visual comparisons (baseline vs candidate). ?status= &pullRequestId= &runId= &repositoryId=                                                    |
-| POST   | `/visual-snapshots/:id/decision`       | Permission `suite.manage`        | `VisualDecisionInput`     | `VisualSnapshot`           | Approve a changed screenshot as the new baseline, or reject it (files a visual-regression bug). Decisions are explicit and audited.            |
-| GET    | `/github/issues`                       | Any workspace member             | —                         | `GithubIssueListItem[]`    | Open issues in connected repositories, with what an import would produce. ?repositoryId= &q= &imported=true\|false                             |
-| POST   | `/github/issues/import`                | Permission `task.create`         | `ImportIssuesInput`       | `ImportIssuesResult`       | Import GitHub issues as DevPilot tasks: checklists become acceptance criteria, labels set priority. Already-imported issues are skipped.       |
-| POST   | `/session`                             | None                             | `SignInInput`             | `SessionInfo`              | Sign in as a demo persona (sets fp_session and fp_ws cookies).                                                                                 |
-| POST   | `/session/workspace`                   | Any workspace member             | `SwitchWorkspaceInput`    | `SessionInfo`              | Switch the active workspace.                                                                                                                   |
-| POST   | `/signup`                              | None                             | `SignUpInput`             | `User`                     | Create an account (mock GitHub OAuth or email). The user then creates a workspace in onboarding.                                               |
-| POST   | `/orgs`                                | None                             | `CreateWorkspaceInput`    | `Organization`             | Create a workspace for the signed-in user (owner, Free plan with a 14-day Team trial).                                                         |
-| GET    | `/github/repositories`                 | Any workspace member             | —                         | `GithubRepoCandidate[]`    | Repositories visible to the GitHub App installation (mock). ?account=                                                                          |
-| POST   | `/github/install`                      | Permission `repo.connect`        | `ConnectIntegrationInput` | `Integration`              | Record the GitHub App installation for the workspace (mock).                                                                                   |
-| POST   | `/repositories/connect`                | Permission `repo.connect`        | `ConnectReposInput`       | `ConnectReposResult`       | Connect selected repositories to a project and start indexing (repository intelligence).                                                       |
-| POST   | `/repositories/:id/config`             | Permission `repo.connect`        | `RepoConfigInput`         | `Repository`               | Confirm discovered test commands and scan schedule.                                                                                            |
-| POST   | `/onboarding/first-run`                | Permission `test.run`            | `FirstRunInput`           | `FirstRunResult`           | Run the first ShipSafe test run or CodeKeeper scan for a repository.                                                                           |
-| GET    | `/overview`                            | Any workspace member             | —                         | `Overview`                 | Workspace overview: North Star, KPIs, lifecycle funnel, attention list, live sessions, activity, setup checklist.                              |
-| GET    | `/projects`                            | Any workspace member             | —                         | `ProjectSummary[]`         | Projects with health, PR, session and finding counts.                                                                                          |
-| POST   | `/projects`                            | Permission `repo.connect`        | `NewProjectInput`         | `Project`                  | Create a project.                                                                                                                              |
-| GET    | `/projects/:id`                        | Any workspace member             | —                         | `ProjectDetail`            | Project detail: repositories, tasks, PRs, runs and findings.                                                                                   |
-| GET    | `/repositories`                        | Any workspace member             | —                         | `RepositorySummary[]`      | Connected repositories. ?projectId=                                                                                                            |
-| GET    | `/repositories/:id`                    | Any workspace member             | —                         | `RepositoryDetail`         | Repository detail: suites, findings, health history, scans, runs, PRs.                                                                         |
-| POST   | `/repositories/:id/scans`              | Permission `test.run`            | —                         | `Scan`                     | Start a CodeKeeper scan of the repository.                                                                                                     |
-| GET    | `/devpilot/overview`                   | Any workspace member             | —                         | `DevPilotOverview`         | DevPilot command centre: KPIs, board, live sessions, agents.                                                                                   |
-| GET    | `/tasks`                               | Any workspace member             | —                         | `TaskListItem[]`           | Tasks. Filters: status, projectId, repositoryId, source, agentId, q.                                                                           |
-| POST   | `/tasks`                               | Permission `task.create`         | `NewTaskInput`            | `Task`                     | Create a task (optionally launch it). Validates policy, agent and budget.                                                                      |
-| GET    | `/tasks/:id`                           | Any workspace member             | —                         | `TaskDetail`               | Task detail: sessions, approvals, PR, verification runs, linked bug/finding, lifecycle, activity, policy preview.                              |
-| POST   | `/tasks/:id/actions`                   | Permission `task.launch`         | `TaskActionInput`         | `TaskDetail`               | launch \| cancel \| retry \| archive. Enforces the task state machine, retry cap and budget hard cap.                                          |
-| GET    | `/sessions`                            | Any workspace member             | —                         | `SessionListItem[]`        | Agent sessions. ?status=                                                                                                                       |
-| GET    | `/sessions/:id`                        | Any workspace member             | —                         | `SessionDetail`            | Session detail with workspace, approvals and other attempts.                                                                                   |
-| GET    | `/sessions/:id/log`                    | Any workspace member             | —                         | `LiveLog`                  | Structured, secret-redacted session log (poll every ~1.2s while running).                                                                      |
-| GET    | `/sessions/:id/diff`                   | Any workspace member             | —                         | `DiffFile[]`               | Changed files with hunks for the session's commit.                                                                                             |
-| POST   | `/sessions/:id/cancel`                 | Permission `task.cancel`         | —                         | `SessionListItem`          | Cancel an active session; the worker is terminated and the workspace cleaned up.                                                               |
-| GET    | `/workspaces`                          | Any workspace member             | —                         | see below                  | Isolated execution workspaces (one per session).                                                                                               |
-| GET    | `/agents`                              | Any workspace member             | —                         | `Agent[]`                  | Configured coding-agent runtimes.                                                                                                              |
-| POST   | `/agents/:id`                          | Permission `agent.manage`        | see below                 | `Agent`                    | Update or suspend an agent runtime.                                                                                                            |
-| GET    | `/shipsafe/overview`                   | Any workspace member             | —                         | `ShipSafeOverview`         | Testing dashboard: pass-rate trend, KPIs, failure classes, repositories, recent runs, open bugs.                                               |
-| GET    | `/test-suites`                         | Any workspace member             | —                         | see below                  | Test suites. ?repositoryId=                                                                                                                    |
-| POST   | `/test-suites`                         | Permission `suite.manage`        | `TestSuiteInput`          | `TestSuite`                | Create a test suite.                                                                                                                           |
-| POST   | `/test-suites/:id`                     | Permission `suite.manage`        | `TestSuitePatch`          | `TestSuite`                | Update a test suite (enable/disable, required, command, timeout).                                                                              |
-| GET    | `/test-runs`                           | Any workspace member             | —                         | `TestRunListItem[]`        | Test runs. ?repositoryId= &status= &pullRequestId= &trigger=                                                                                   |
-| POST   | `/test-runs`                           | Permission `test.run`            | `NewTestRunInput`         | `TestRun`                  | Start a manual test run on a branch.                                                                                                           |
-| GET    | `/test-runs/:id`                       | Any workspace member             | —                         | `TestRunDetail`            | Run detail: environment, commit pins, test plan with reasons, results, evidence, comparison with the previous run, worker log.                 |
-| POST   | `/test-runs/:id/rerun`                 | Permission `test.run`            | —                         | `TestRun`                  | Rerun with the same commit pin (infra failures rerun free).                                                                                    |
-| GET    | `/bugs`                                | Any workspace member             | —                         | `BugListItem[]`            | Bugs from ShipSafe failures. ?status= &severity=                                                                                               |
-| GET    | `/bugs/:id`                            | Any workspace member             | —                         | `BugDetail`                | Bug detail with the failing result, evidence, run, PR and fix task.                                                                            |
-| POST   | `/bugs/:id/actions`                    | Permission `bug.manage`          | `BugActionInput`          | `BugDetail`                | create_fix_task (SS-012: preserves commit, logs and context; capped retries) \| resolve \| wont_fix \| reopen.                                 |
-| GET    | `/pull-requests`                       | Any workspace member             | —                         | `PullRequestListItem[]`    | Pull requests (agent and human) with verification status. ?status= &author=agent\|person &repositoryId= &filter=review                         |
-| GET    | `/pull-requests/:id`                   | Any workspace member             | —                         | `PullRequestDetail`        | PR verification detail: runs, results, bugs, release policy and merge blockers.                                                                |
-| GET    | `/pull-requests/:id/diff`              | Any workspace member             | —                         | `DiffFile[]`               | Diff for the PR head.                                                                                                                          |
-| POST   | `/pull-requests/:id/review`            | Permission `pr.review`           | `ReviewInput`             | `PullRequestDetail`        | Record a human review (mirrors the GitHub review).                                                                                             |
-| POST   | `/pull-requests/:id/merge`             | Permission `pr.review`           | —                         | `PullRequestDetail`        | Demo only: simulate the GitHub merge webhook. Refused while required checks or review are missing.                                             |
-| GET    | `/codekeeper/overview`                 | Any workspace member             | —                         | `CodeKeeperOverview`       | Repository health: average and trend, per-repository scores, findings breakdown, scans, maintenance PR acceptance, prioritised queue.          |
-| GET    | `/dependencies`                        | Any workspace member             | —                         | see below                  | Dependency inventory. ?repositoryId= &q= &filter=outdated\|vulnerable                                                                          |
-| GET    | `/findings`                            | Any workspace member             | —                         | `FindingListItem[]`        | Maintenance findings. ?status= &severity= &category= &repositoryId=                                                                            |
-| GET    | `/findings/:id`                        | Any workspace member             | —                         | `FindingDetail`            | Finding detail with advisory evidence, dependency and linked task.                                                                             |
-| POST   | `/findings/:id/actions`                | Permission `finding.create_task` | `FindingActionInput`      | `FindingDetail`            | create_task (policy-validated DevPilot maintenance task) \| suppress (reason + expiry, admins) \| unsuppress.                                  |
-| GET    | `/approvals`                           | Any workspace member             | —                         | see below                  | Approval centre. ?status=                                                                                                                      |
-| POST   | `/approvals/:id/decision`              | Permission `approval.decide`     | `ApprovalDecisionInput`   | `Approval`                 | Approve or reject. Bound to the exact action and context; requester can't approve their own request.                                           |
-| POST   | `/sessions/:id/input`                  | Permission `task.launch`         | `SessionInput`            | `SessionListItem`          | Answer an agent's clarification question and resume the session.                                                                               |
-| GET    | `/analytics`                           | Any workspace member             | —                         | `Analytics`                | Analytics (30/90 days): North Star, task success by type, providers (task-mix caveat), PR acceptance, test usefulness, cost per verified task. |
-| GET    | `/integrations`                        | Any workspace member             | —                         | `IntegrationView[]`        | Integration catalogue merged with this workspace's connections.                                                                                |
-| POST   | `/integrations/:providerId/connect`    | Permission `integration.manage`  | `ConnectIntegrationInput` | `Integration`              | Connect (mock OAuth / API key) an integration. Credentials live in the vault; only a reference is stored.                                      |
-| POST   | `/integrations/:providerId/disconnect` | Permission `integration.manage`  | —                         | `Ok`                       | Disconnect and revoke an integration.                                                                                                          |
-| POST   | `/workspace`                           | Permission `workspace.manage`    | `WorkspacePatch`          | `Organization`             | Rename the workspace.                                                                                                                          |
-| GET    | `/members`                             | Any workspace member             | —                         | `Members`                  | Members, pending invitations and seats.                                                                                                        |
-| POST   | `/members/invite`                      | Permission `member.manage`       | `InviteInput`             | `Invitation`               | Invite a member (respects the plan's seat limit).                                                                                              |
-| POST   | `/invitations/:id/revoke`              | Permission `member.manage`       | —                         | `Ok`                       | Revoke a pending invitation.                                                                                                                   |
-| POST   | `/members/:userId/role`                | Permission `member.manage`       | `RoleChangeInput`         | `Ok`                       | Change a member's role. Only owners can grant or remove owner; the last owner can't be demoted.                                                |
-| POST   | `/members/:userId/remove`              | Permission `member.manage`       | —                         | `Ok`                       | Remove a member from the workspace.                                                                                                            |
-| GET    | `/policy`                              | Any workspace member             | —                         | `Policy`                   | Workspace policies: providers, protected paths, network, required checks, approval rules, retention.                                           |
-| POST   | `/policy`                              | Permission `policy.manage`       | `PolicyPatch`             | `Policy`                   | Update workspace policies (Team plan and above).                                                                                               |
-| GET    | `/api-keys`                            | Any workspace member             | —                         | `ApiKey[]`                 | API keys (prefix only; secrets are shown once at creation).                                                                                    |
-| POST   | `/api-keys`                            | Permission `apikey.manage`       | `ApiKeyInput`             | `ApiKeyCreated`            | Create an API key. The secret is returned once.                                                                                                |
-| POST   | `/api-keys/:id/revoke`                 | Permission `apikey.manage`       | —                         | `Ok`                       | Revoke an API key immediately.                                                                                                                 |
-| GET    | `/audit-logs`                          | Any workspace member             | —                         | `ActivityItem[]`           | Audit log of user, agent and system actions. ?actorType= &q= &limit=                                                                           |
-| GET    | `/plans`                               | None                             | —                         | `Plan[]`                   | Public plan catalogue (pricing page).                                                                                                          |
-| GET    | `/billing`                             | Any workspace member             | —                         | `Billing`                  | Plan, metered usage vs quota, projected spend, budget, cost breakdowns and invoices.                                                           |
-| POST   | `/billing/plan`                        | Permission `billing.manage`      | `ChangePlanInput`         | `Billing`                  | Change plan or billing cycle (mock checkout). Enterprise is sales-assisted.                                                                    |
-| POST   | `/billing/budget`                      | Permission `billing.manage`      | `BudgetInput`             | `Billing`                  | Set the monthly execution budget, hard cap and alert thresholds.                                                                               |
-| GET    | `/notifications`                       | Any workspace member             | —                         | `Notification[]`           | Notifications for the active workspace.                                                                                                        |
-| POST   | `/notifications/read`                  | Any workspace member             | see below                 | `Ok`                       | Mark notifications read. Body { ids?: string[] }.                                                                                              |
-| GET    | `/search`                              | Any workspace member             | —                         | `SearchResult[]`           | Search projects, repositories, tasks, PRs, bugs, findings and sessions. ?q=                                                                    |
-| POST   | `/demo/reset`                          | None                             | —                         | `Ok`                       | Reset all mock data to the seed (demo mode).                                                                                                   |
+| Method | Path | Auth | Request | Response | Summary |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/session/personas` | None | — | see below | Demo personas for the sign-in screen. |
+| GET | `/session/status` | None | — | see below | Whether the visitor is signed in and has a workspace (used by onboarding before a workspace exists). |
+| GET | `/session` | Any workspace member | — | `SessionInfo` | Current user, active workspace, role, other workspaces and badge counts. |
+| GET | `/visual-snapshots` | Any workspace member | — | `VisualSnapshotListItem[]` | Visual comparisons (baseline vs candidate). ?status= &pullRequestId= &runId= &repositoryId= |
+| POST | `/visual-snapshots/:id/decision` | Permission `suite.manage` | `VisualDecisionInput` | `VisualSnapshot` | Approve a changed screenshot as the new baseline, or reject it (files a visual-regression bug). Decisions are explicit and audited. |
+| GET | `/github/issues` | Any workspace member | — | `GithubIssueListItem[]` | Open issues in connected repositories, with what an import would produce. ?repositoryId= &q= &imported=true\|false |
+| POST | `/github/issues/import` | Permission `task.create` | `ImportIssuesInput` | `ImportIssuesResult` | Import GitHub issues as DevPilot tasks: checklists become acceptance criteria, labels set priority. Already-imported issues are skipped. |
+| POST | `/session` | None | `SignInInput` | `SessionInfo` | Sign in as a demo persona (sets fp_session and fp_ws cookies). |
+| POST | `/session/workspace` | Any workspace member | `SwitchWorkspaceInput` | `SessionInfo` | Switch the active workspace. |
+| POST | `/signup` | None | `SignUpInput` | `User` | Create an account (mock GitHub OAuth or email). The user then creates a workspace in onboarding. |
+| POST | `/orgs` | None | `CreateWorkspaceInput` | `Organization` | Create a workspace for the signed-in user (owner, Free plan with a 14-day Team trial). |
+| GET | `/github/repositories` | Any workspace member | — | `GithubRepoCandidate[]` | Repositories visible to the GitHub App installation (mock). ?account= |
+| POST | `/github/install` | Permission `repo.connect` | `ConnectIntegrationInput` | `Integration` | Record the GitHub App installation for the workspace (mock). |
+| POST | `/repositories/connect` | Permission `repo.connect` | `ConnectReposInput` | `ConnectReposResult` | Connect selected repositories to a project and start indexing (repository intelligence). |
+| POST | `/repositories/:id/config` | Permission `repo.connect` | `RepoConfigInput` | `Repository` | Confirm discovered test commands and scan schedule. |
+| POST | `/onboarding/first-run` | Permission `test.run` | `FirstRunInput` | `FirstRunResult` | Run the first ShipSafe test run or CodeKeeper scan for a repository. |
+| GET | `/overview` | Any workspace member | — | `Overview` | Workspace overview: North Star, KPIs, lifecycle funnel, attention list, live sessions, activity, setup checklist. |
+| GET | `/projects` | Any workspace member | — | `ProjectSummary[]` | Projects with health, PR, session and finding counts. |
+| POST | `/projects` | Permission `repo.connect` | `NewProjectInput` | `Project` | Create a project. |
+| GET | `/projects/:id` | Any workspace member | — | `ProjectDetail` | Project detail: repositories, tasks, PRs, runs and findings. |
+| GET | `/repositories` | Any workspace member | — | `RepositorySummary[]` | Connected repositories. ?projectId= |
+| GET | `/repositories/:id` | Any workspace member | — | `RepositoryDetail` | Repository detail: suites, findings, health history, scans, runs, PRs. |
+| POST | `/repositories/:id/scans` | Permission `test.run` | — | `Scan` | Start a CodeKeeper scan of the repository. |
+| GET | `/devpilot/overview` | Any workspace member | — | `DevPilotOverview` | DevPilot command centre: KPIs, board, live sessions, agents. |
+| GET | `/tasks` | Any workspace member | — | `TaskListItem[]` | Tasks. Filters: status, projectId, repositoryId, source, agentId, q. |
+| POST | `/tasks` | Permission `task.create` | `NewTaskInput` | `Task` | Create a task (optionally launch it). Validates policy, agent and budget. |
+| GET | `/tasks/:id` | Any workspace member | — | `TaskDetail` | Task detail: sessions, approvals, PR, verification runs, linked bug/finding, lifecycle, activity, policy preview. |
+| POST | `/tasks/:id/actions` | Permission `task.launch` | `TaskActionInput` | `TaskDetail` | launch \| cancel \| retry \| archive. Enforces the task state machine, retry cap and budget hard cap. |
+| GET | `/sessions` | Any workspace member | — | `SessionListItem[]` | Agent sessions. ?status= |
+| GET | `/sessions/:id` | Any workspace member | — | `SessionDetail` | Session detail with workspace, approvals and other attempts. |
+| GET | `/sessions/:id/log` | Any workspace member | — | `LiveLog` | Structured, secret-redacted session log (poll every ~1.2s while running). |
+| GET | `/sessions/:id/diff` | Any workspace member | — | `DiffFile[]` | Changed files with hunks for the session's commit. |
+| POST | `/sessions/:id/cancel` | Permission `task.cancel` | — | `SessionListItem` | Cancel an active session; the worker is terminated and the workspace cleaned up. |
+| GET | `/workspaces` | Any workspace member | — | see below | Isolated execution workspaces (one per session). |
+| GET | `/agents` | Any workspace member | — | `Agent[]` | Configured coding-agent runtimes. |
+| POST | `/agents/:id` | Permission `agent.manage` | see below | `Agent` | Update or suspend an agent runtime. |
+| GET | `/shipsafe/overview` | Any workspace member | — | `ShipSafeOverview` | Testing dashboard: pass-rate trend, KPIs, failure classes, repositories, recent runs, open bugs. |
+| GET | `/test-suites` | Any workspace member | — | see below | Test suites. ?repositoryId= |
+| POST | `/test-suites` | Permission `suite.manage` | `TestSuiteInput` | `TestSuite` | Create a test suite. |
+| POST | `/test-suites/:id` | Permission `suite.manage` | `TestSuitePatch` | `TestSuite` | Update a test suite (enable/disable, required, command, timeout). |
+| GET | `/test-runs` | Any workspace member | — | `TestRunListItem[]` | Test runs. ?repositoryId= &status= &pullRequestId= &trigger= |
+| POST | `/test-runs` | Permission `test.run` | `NewTestRunInput` | `TestRun` | Start a manual test run on a branch. |
+| GET | `/test-runs/:id` | Any workspace member | — | `TestRunDetail` | Run detail: environment, commit pins, test plan with reasons, results, evidence, comparison with the previous run, worker log. |
+| POST | `/test-runs/:id/rerun` | Permission `test.run` | — | `TestRun` | Rerun with the same commit pin (infra failures rerun free). |
+| GET | `/bugs` | Any workspace member | — | `BugListItem[]` | Bugs from ShipSafe failures. ?status= &severity= |
+| GET | `/bugs/:id` | Any workspace member | — | `BugDetail` | Bug detail with the failing result, evidence, run, PR and fix task. |
+| POST | `/bugs/:id/actions` | Permission `bug.manage` | `BugActionInput` | `BugDetail` | create_fix_task (SS-012: preserves commit, logs and context; capped retries) \| resolve \| wont_fix \| reopen. |
+| GET | `/pull-requests` | Any workspace member | — | `PullRequestListItem[]` | Pull requests (agent and human) with verification status. ?status= &author=agent\|person &repositoryId= &filter=review |
+| GET | `/pull-requests/:id` | Any workspace member | — | `PullRequestDetail` | PR verification detail: runs, results, bugs, release policy and merge blockers. |
+| GET | `/pull-requests/:id/diff` | Any workspace member | — | `DiffFile[]` | Diff for the PR head. |
+| POST | `/pull-requests/:id/review` | Permission `pr.review` | `ReviewInput` | `PullRequestDetail` | Record a human review (mirrors the GitHub review). |
+| POST | `/pull-requests/:id/merge` | Permission `pr.review` | — | `PullRequestDetail` | Demo only: simulate the GitHub merge webhook. Refused while required checks or review are missing. |
+| GET | `/codekeeper/overview` | Any workspace member | — | `CodeKeeperOverview` | Repository health: average and trend, per-repository scores, findings breakdown, scans, maintenance PR acceptance, prioritised queue. |
+| GET | `/dependencies` | Any workspace member | — | see below | Dependency inventory. ?repositoryId= &q= &filter=outdated\|vulnerable |
+| GET | `/findings` | Any workspace member | — | `FindingListItem[]` | Maintenance findings. ?status= &severity= &category= &repositoryId= |
+| GET | `/findings/:id` | Any workspace member | — | `FindingDetail` | Finding detail with advisory evidence, dependency and linked task. |
+| POST | `/findings/:id/actions` | Permission `finding.create_task` | `FindingActionInput` | `FindingDetail` | create_task (policy-validated DevPilot maintenance task) \| suppress (reason + expiry, admins) \| unsuppress. |
+| GET | `/approvals` | Any workspace member | — | see below | Approval centre. ?status= |
+| POST | `/approvals/:id/decision` | Permission `approval.decide` | `ApprovalDecisionInput` | `Approval` | Approve or reject. Bound to the exact action and context; requester can't approve their own request. |
+| POST | `/sessions/:id/input` | Permission `task.launch` | `SessionInput` | `SessionListItem` | Answer an agent's clarification question and resume the session. |
+| GET | `/analytics` | Any workspace member | — | `Analytics` | Analytics (30/90 days): North Star, task success by type, providers (task-mix caveat), PR acceptance, test usefulness, cost per verified task. |
+| GET | `/integrations` | Any workspace member | — | `IntegrationView[]` | Integration catalogue merged with this workspace's connections. |
+| POST | `/integrations/:providerId/connect` | Permission `integration.manage` | `ConnectIntegrationInput` | `Integration` | Connect (mock OAuth / API key) an integration. Credentials live in the vault; only a reference is stored. |
+| POST | `/integrations/:providerId/disconnect` | Permission `integration.manage` | — | `Ok` | Disconnect and revoke an integration. |
+| POST | `/workspace` | Permission `workspace.manage` | `WorkspacePatch` | `Organization` | Rename the workspace. |
+| GET | `/members` | Any workspace member | — | `Members` | Members, pending invitations and seats. |
+| POST | `/members/invite` | Permission `member.manage` | `InviteInput` | `Invitation` | Invite a member (respects the plan's seat limit). |
+| POST | `/invitations/:id/revoke` | Permission `member.manage` | — | `Ok` | Revoke a pending invitation. |
+| POST | `/members/:userId/role` | Permission `member.manage` | `RoleChangeInput` | `Ok` | Change a member's role. Only owners can grant or remove owner; the last owner can't be demoted. |
+| POST | `/members/:userId/remove` | Permission `member.manage` | — | `Ok` | Remove a member from the workspace. |
+| GET | `/policy` | Any workspace member | — | `Policy` | Workspace policies: providers, protected paths, network, required checks, approval rules, retention. |
+| POST | `/policy` | Permission `policy.manage` | `PolicyPatch` | `Policy` | Update workspace policies (Team plan and above). |
+| GET | `/api-keys` | Any workspace member | — | `ApiKey[]` | API keys (prefix only; secrets are shown once at creation). |
+| POST | `/api-keys` | Permission `apikey.manage` | `ApiKeyInput` | `ApiKeyCreated` | Create an API key. The secret is returned once. |
+| POST | `/api-keys/:id/revoke` | Permission `apikey.manage` | — | `Ok` | Revoke an API key immediately. |
+| GET | `/audit-logs` | Any workspace member | — | `ActivityItem[]` | Audit log of user, agent and system actions. ?actorType= &q= &limit= |
+| GET | `/plans` | None | — | `Plan[]` | Public plan catalogue (pricing page). |
+| GET | `/billing` | Any workspace member | — | `Billing` | Plan, metered usage vs quota, projected spend, budget, cost breakdowns and invoices. |
+| POST | `/billing/plan` | Permission `billing.manage` | `ChangePlanInput` | `Billing` | Change plan or billing cycle (mock checkout). Enterprise is sales-assisted. |
+| POST | `/billing/budget` | Permission `billing.manage` | `BudgetInput` | `Billing` | Set the monthly execution budget, hard cap and alert thresholds. |
+| GET | `/notifications` | Any workspace member | — | `Notification[]` | Notifications for the active workspace. |
+| POST | `/notifications/read` | Any workspace member | see below | `Ok` | Mark notifications read. Body { ids?: string[] }. |
+| GET | `/search` | Any workspace member | — | `SearchResult[]` | Search projects, repositories, tasks, PRs, bugs, findings and sessions. ?q= |
+| POST | `/demo/reset` | None | — | `Ok` | Reset all mock data to the seed (demo mode). |
 
 ## Endpoint details
 
@@ -112,7 +112,7 @@ Guardrails the backend must enforce (not just the UI):
 Demo personas for the sign-in screen.
 
 - **Auth:** None
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -152,15 +152,30 @@ Demo personas for the sign-in screen.
             },
             "role": {
               "type": "string",
-              "enum": ["owner", "admin", "member", "viewer"]
+              "enum": [
+                "owner",
+                "admin",
+                "member",
+                "viewer"
+              ]
             }
           },
-          "required": ["orgId", "name", "role"],
+          "required": [
+            "orgId",
+            "name",
+            "role"
+          ],
           "additionalProperties": false
         }
       }
     },
-    "required": ["id", "name", "email", "title", "workspaces"],
+    "required": [
+      "id",
+      "name",
+      "email",
+      "title",
+      "workspaces"
+    ],
     "additionalProperties": false
   }
 }
@@ -171,7 +186,7 @@ Demo personas for the sign-in screen.
 Whether the visitor is signed in and has a workspace (used by onboarding before a workspace exists).
 
 - **Auth:** None
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -185,10 +200,17 @@ Whether the visitor is signed in and has a workspace (used by onboarding before 
       "type": "boolean"
     },
     "name": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "required": ["signedIn", "hasWorkspace", "name"],
+  "required": [
+    "signedIn",
+    "hasWorkspace",
+    "name"
+  ],
   "additionalProperties": false
 }
 ```
@@ -428,7 +450,7 @@ Cancel an active session; the worker is terminated and the workspace cleaned up.
 Isolated execution workspaces (one per session).
 
 - **Auth:** Any workspace member
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -448,14 +470,21 @@ Isolated execution workspaces (one per session).
       },
       "runtime": {
         "type": "string",
-        "enum": ["container", "worktree"]
+        "enum": [
+          "container",
+          "worktree"
+        ]
       },
       "image": {
         "type": "string"
       },
       "state": {
         "type": "string",
-        "enum": ["provisioning", "active", "cleaned"]
+        "enum": [
+          "provisioning",
+          "active",
+          "cleaned"
+        ]
       },
       "cpu": {
         "type": "number"
@@ -468,7 +497,11 @@ Isolated execution workspaces (one per session).
       },
       "networkPolicy": {
         "type": "string",
-        "enum": ["none", "allowlist", "open"]
+        "enum": [
+          "none",
+          "allowlist",
+          "open"
+        ]
       },
       "createdAt": {
         "type": "string",
@@ -495,7 +528,14 @@ Isolated execution workspaces (one per session).
       },
       "sessionStatus": {
         "type": "string",
-        "enum": ["queued", "running", "waiting", "completed", "failed", "cancelled"]
+        "enum": [
+          "queued",
+          "running",
+          "waiting",
+          "completed",
+          "failed",
+          "cancelled"
+        ]
       },
       "repositoryName": {
         "type": "string"
@@ -538,7 +578,7 @@ Configured coding-agent runtimes.
 Update or suspend an agent runtime.
 
 - **Auth:** Permission `agent.manage`
-- **Request body:**
+- **Request body:** 
 
 ```json
 {
@@ -547,7 +587,10 @@ Update or suspend an agent runtime.
   "properties": {
     "status": {
       "type": "string",
-      "enum": ["active", "suspended"]
+      "enum": [
+        "active",
+        "suspended"
+      ]
     },
     "maxConcurrent": {
       "type": "integer",
@@ -566,7 +609,6 @@ Update or suspend an agent runtime.
   "additionalProperties": false
 }
 ```
-
 - **Response 200:** [`Agent`](#agent)
 
 ### GET `/shipsafe/overview`
@@ -581,7 +623,7 @@ Testing dashboard: pass-rate trend, KPIs, failure classes, repositories, recent 
 Test suites. ?repositoryId=
 
 - **Auth:** Any workspace member
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -604,7 +646,11 @@ Test suites. ?repositoryId=
       },
       "type": {
         "type": "string",
-        "enum": ["unit", "playwright", "api"]
+        "enum": [
+          "unit",
+          "playwright",
+          "api"
+        ]
       },
       "command": {
         "type": "string"
@@ -644,7 +690,10 @@ Test suites. ?repositoryId=
         "type": "string"
       },
       "lastStatus": {
-        "type": ["string", "null"]
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "required": [
@@ -785,7 +834,7 @@ Repository health: average and trend, per-repository scores, findings breakdown,
 Dependency inventory. ?repositoryId= &q= &filter=outdated|vulnerable
 
 - **Auth:** Any workspace member
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -805,7 +854,10 @@ Dependency inventory. ?repositoryId= &q= &filter=outdated|vulnerable
       },
       "ecosystem": {
         "type": "string",
-        "enum": ["npm", "pypi"]
+        "enum": [
+          "npm",
+          "pypi"
+        ]
       },
       "name": {
         "type": "string"
@@ -886,7 +938,7 @@ create_task (policy-validated DevPilot maintenance task) | suppress (reason + ex
 Approval centre. ?status=
 
 - **Auth:** Any workspace member
-- **Response 200:**
+- **Response 200:** 
 
 ```json
 {
@@ -915,7 +967,12 @@ Approval centre. ?status=
       },
       "status": {
         "type": "string",
-        "enum": ["pending", "approved", "rejected", "expired"]
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "expired"
+        ]
       },
       "title": {
         "type": "string"
@@ -932,16 +989,26 @@ Approval centre. ?status=
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["person", "agent"]
+            "enum": [
+              "person",
+              "agent"
+            ]
           },
           "id": {
             "type": "string"
           },
           "sessionId": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "required": ["type", "id", "sessionId"],
+        "required": [
+          "type",
+          "id",
+          "sessionId"
+        ],
         "additionalProperties": false
       },
       "requestedAt": {
@@ -956,10 +1023,18 @@ Approval centre. ?status=
       },
       "approverRole": {
         "type": "string",
-        "enum": ["owner", "admin", "member", "viewer"]
+        "enum": [
+          "owner",
+          "admin",
+          "member",
+          "viewer"
+        ]
       },
       "decidedBy": {
-        "type": ["string", "null"]
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "decidedAt": {
         "anyOf": [
@@ -974,14 +1049,21 @@ Approval centre. ?status=
         ]
       },
       "comment": {
-        "type": ["string", "null"]
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "requesterResolved": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["person", "agent", "system"]
+            "enum": [
+              "person",
+              "agent",
+              "system"
+            ]
           },
           "id": {
             "type": "string"
@@ -993,11 +1075,19 @@ Approval centre. ?status=
             "type": "string"
           }
         },
-        "required": ["type", "id", "name", "detail"],
+        "required": [
+          "type",
+          "id",
+          "name",
+          "detail"
+        ],
         "additionalProperties": false
       },
       "taskTitle": {
-        "type": ["string", "null"]
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "canDecide": {
         "type": "boolean"
@@ -1202,7 +1292,7 @@ Notifications for the active workspace.
 Mark notifications read. Body { ids?: string[] }.
 
 - **Auth:** Any workspace member
-- **Request body:**
+- **Request body:** 
 
 ```json
 {
@@ -1219,7 +1309,6 @@ Mark notifications read. Body { ids?: string[] }.
   "additionalProperties": false
 }
 ```
-
 - **Response 200:** [`Ok`](#ok)
 
 ### GET `/search`
@@ -1272,7 +1361,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "ip": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "actorResolved": {
       "$ref": "#/schemas/ResolvedActor"
@@ -1281,7 +1373,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "href": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -1319,7 +1414,10 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["type", "id"],
+      "required": [
+        "type",
+        "id"
+      ],
       "additionalProperties": false
     },
     {
@@ -1333,7 +1431,10 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["type", "id"],
+      "required": [
+        "type",
+        "id"
+      ],
       "additionalProperties": false
     },
     {
@@ -1347,7 +1448,10 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["type", "id"],
+      "required": [
+        "type",
+        "id"
+      ],
       "additionalProperties": false
     }
   ]
@@ -1379,7 +1483,10 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["active", "suspended"]
+      "enum": [
+        "active",
+        "suspended"
+      ]
     },
     "maxConcurrent": {
       "type": "integer",
@@ -1448,7 +1555,13 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["category", "tasks", "successPct", "avgCostUsd", "reworkPct"],
+        "required": [
+          "category",
+          "tasks",
+          "successPct",
+          "avgCostUsd",
+          "reworkPct"
+        ],
         "additionalProperties": false
       }
     },
@@ -1503,7 +1616,12 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["agentPct", "humanPct", "agentMerged", "humanMerged"],
+      "required": [
+        "agentPct",
+        "humanPct",
+        "agentMerged",
+        "humanMerged"
+      ],
       "additionalProperties": false
     },
     "testUsefulness": {
@@ -1519,7 +1637,11 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["actionablePct", "reported", "falsePositive"],
+      "required": [
+        "actionablePct",
+        "reported",
+        "falsePositive"
+      ],
       "additionalProperties": false
     },
     "timeToVerifyMinP50": {
@@ -1543,7 +1665,11 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["date", "agentUsd", "browserUsd"],
+        "required": [
+          "date",
+          "agentUsd",
+          "browserUsd"
+        ],
         "additionalProperties": false
       }
     }
@@ -1610,7 +1736,16 @@ Reset all mock data to the seed (demo mode).
       ]
     }
   },
-  "required": ["id", "orgId", "name", "prefix", "scopes", "createdBy", "createdAt", "lastUsedAt"],
+  "required": [
+    "id",
+    "orgId",
+    "name",
+    "prefix",
+    "scopes",
+    "createdBy",
+    "createdAt",
+    "lastUsedAt"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1630,7 +1765,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["key", "secret"],
+  "required": [
+    "key",
+    "secret"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1655,7 +1793,10 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["name", "scopes"],
+  "required": [
+    "name",
+    "scopes"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1695,16 +1836,26 @@ Reset all mock data to the seed (demo mode).
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["person", "agent"]
+          "enum": [
+            "person",
+            "agent"
+          ]
         },
         "id": {
           "type": "string"
         },
         "sessionId": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": ["type", "id", "sessionId"],
+      "required": [
+        "type",
+        "id",
+        "sessionId"
+      ],
       "additionalProperties": false
     },
     "requestedAt": {
@@ -1721,7 +1872,10 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/Role"
     },
     "decidedBy": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "decidedAt": {
       "anyOf": [
@@ -1736,7 +1890,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "comment": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -1787,14 +1944,20 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "decision": {
       "type": "string",
-      "enum": ["approved", "rejected"]
+      "enum": [
+        "approved",
+        "rejected"
+      ]
     },
     "comment": {
       "default": "",
       "type": "string"
     }
   },
-  "required": ["decision", "comment"],
+  "required": [
+    "decision",
+    "comment"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1812,13 +1975,21 @@ Reset all mock data to the seed (demo mode).
     },
     "mode": {
       "type": "string",
-      "enum": ["allow", "require_approval", "prohibited"]
+      "enum": [
+        "allow",
+        "require_approval",
+        "prohibited"
+      ]
     },
     "approverRole": {
       "$ref": "#/schemas/Role"
     }
   },
-  "required": ["action", "mode", "approverRole"],
+  "required": [
+    "action",
+    "mode",
+    "approverRole"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1830,7 +2001,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/ApprovalStatus",
   "type": "string",
-  "enum": ["pending", "approved", "rejected", "expired"]
+  "enum": [
+    "pending",
+    "approved",
+    "rejected",
+    "expired"
+  ]
 }
 ```
 
@@ -1868,10 +2044,21 @@ Reset all mock data to the seed (demo mode).
     },
     "severity": {
       "type": "string",
-      "enum": ["danger", "warning", "info"]
+      "enum": [
+        "danger",
+        "warning",
+        "info"
+      ]
     }
   },
-  "required": ["id", "kind", "title", "detail", "href", "severity"],
+  "required": [
+    "id",
+    "kind",
+    "title",
+    "detail",
+    "href",
+    "severity"
+  ],
   "additionalProperties": false
 }
 ```
@@ -1889,13 +2076,19 @@ Reset all mock data to the seed (demo mode).
     },
     "billingCycle": {
       "type": "string",
-      "enum": ["monthly", "annual"]
+      "enum": [
+        "monthly",
+        "annual"
+      ]
     },
     "seatsUsed": {
       "type": "number"
     },
     "seatsIncluded": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "periodStart": {
       "type": "string"
@@ -1959,7 +2152,10 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["date", "costUsd"],
+        "required": [
+          "date",
+          "costUsd"
+        ],
         "additionalProperties": false
       }
     },
@@ -1978,7 +2174,11 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["projectId", "name", "costUsd"],
+        "required": [
+          "projectId",
+          "name",
+          "costUsd"
+        ],
         "additionalProperties": false
       }
     },
@@ -1994,7 +2194,10 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["provider", "costUsd"],
+        "required": [
+          "provider",
+          "costUsd"
+        ],
         "additionalProperties": false
       }
     },
@@ -2019,7 +2222,11 @@ Reset all mock data to the seed (demo mode).
               "type": "string"
             }
           },
-          "required": ["brand", "last4", "expires"],
+          "required": [
+            "brand",
+            "last4",
+            "expires"
+          ],
           "additionalProperties": false
         },
         {
@@ -2042,10 +2249,18 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           },
           "limit": {
-            "type": ["number", "null"]
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
-        "required": ["key", "label", "used", "limit"],
+        "required": [
+          "key",
+          "label",
+          "used",
+          "limit"
+        ],
         "additionalProperties": false
       }
     }
@@ -2097,7 +2312,11 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["monthlyLimitUsd", "hardCap", "alertAtPct"],
+  "required": [
+    "monthlyLimitUsd",
+    "hardCap",
+    "alertAtPct"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2126,7 +2345,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "title": {
       "type": "string"
@@ -2136,7 +2358,12 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["open", "fix_in_progress", "resolved", "wont_fix"]
+      "enum": [
+        "open",
+        "fix_in_progress",
+        "resolved",
+        "wont_fix"
+      ]
     },
     "commitSha": {
       "type": "string",
@@ -2160,10 +2387,16 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "assigneeId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -2198,7 +2431,12 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "action": {
       "type": "string",
-      "enum": ["create_fix_task", "resolve", "wont_fix", "reopen"]
+      "enum": [
+        "create_fix_task",
+        "resolve",
+        "wont_fix",
+        "reopen"
+      ]
     },
     "agentId": {
       "type": "string"
@@ -2207,7 +2445,9 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["action"],
+  "required": [
+    "action"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2253,7 +2493,14 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/Repository"
     }
   },
-  "required": ["bug", "result", "run", "pullRequest", "task", "repository"],
+  "required": [
+    "bug",
+    "result",
+    "run",
+    "pullRequest",
+    "task",
+    "repository"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2282,7 +2529,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "title": {
       "type": "string"
@@ -2292,7 +2542,12 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["open", "fix_in_progress", "resolved", "wont_fix"]
+      "enum": [
+        "open",
+        "fix_in_progress",
+        "resolved",
+        "wont_fix"
+      ]
     },
     "commitSha": {
       "type": "string",
@@ -2316,16 +2571,25 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "assigneeId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
     },
     "pullRequestNumber": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "testName": {
       "type": "string"
@@ -2380,10 +2644,16 @@ Reset all mock data to the seed (demo mode).
     },
     "billingCycle": {
       "type": "string",
-      "enum": ["monthly", "annual"]
+      "enum": [
+        "monthly",
+        "annual"
+      ]
     }
   },
-  "required": ["plan", "billingCycle"],
+  "required": [
+    "plan",
+    "billingCycle"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2406,7 +2676,11 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     }
   },
-  "required": ["path", "additions", "deletions"],
+  "required": [
+    "path",
+    "additions",
+    "deletions"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2420,7 +2694,10 @@ Reset all mock data to the seed (demo mode).
   "type": "object",
   "properties": {
     "avgHealth": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "healthTrend": {
       "type": "array",
@@ -2472,11 +2749,21 @@ Reset all mock data to the seed (demo mode).
           },
           "status": {
             "type": "string",
-            "enum": ["queued", "running", "completed", "failed"]
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ]
           },
           "trigger": {
             "type": "string",
-            "enum": ["schedule", "push", "manual", "onboarding"]
+            "enum": [
+              "schedule",
+              "push",
+              "manual",
+              "onboarding"
+            ]
           },
           "startedAt": {
             "type": "string",
@@ -2508,10 +2795,16 @@ Reset all mock data to the seed (demo mode).
             ]
           },
           "scoreAfter": {
-            "type": ["number", "null"]
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "scoreDelta": {
-            "type": ["number", "null"]
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "changes": {
             "type": "array",
@@ -2535,7 +2828,10 @@ Reset all mock data to the seed (demo mode).
                 }
               }
             },
-            "required": ["ecosystems", "checks"],
+            "required": [
+              "ecosystems",
+              "checks"
+            ],
             "additionalProperties": false
           },
           "simulatedEndsAt": {
@@ -2580,7 +2876,12 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["prsCreated", "prsMerged", "acceptancePct", "inProgress"],
+      "required": [
+        "prsCreated",
+        "prsMerged",
+        "acceptancePct",
+        "inProgress"
+      ],
       "additionalProperties": false
     },
     "queue": {
@@ -2617,7 +2918,9 @@ Reset all mock data to the seed (demo mode).
       "minLength": 2
     }
   },
-  "required": ["account"],
+  "required": [
+    "account"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2638,13 +2941,23 @@ Reset all mock data to the seed (demo mode).
       }
     },
     "projectId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "newProjectName": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "required": ["repositories", "projectId", "newProjectName"],
+  "required": [
+    "repositories",
+    "projectId",
+    "newProjectName"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2667,7 +2980,10 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["projectId", "repositoryIds"],
+  "required": [
+    "projectId",
+    "repositoryIds"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2700,7 +3016,11 @@ Reset all mock data to the seed (demo mode).
       ]
     }
   },
-  "required": ["name", "kind", "useCase"],
+  "required": [
+    "name",
+    "kind",
+    "useCase"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2724,7 +3044,10 @@ Reset all mock data to the seed (demo mode).
     },
     "ecosystem": {
       "type": "string",
-      "enum": ["npm", "pypi"]
+      "enum": [
+        "npm",
+        "pypi"
+      ]
     },
     "name": {
       "type": "string"
@@ -2841,7 +3164,10 @@ Reset all mock data to the seed (demo mode).
           },
           "status": {
             "type": "string",
-            "enum": ["active", "suspended"]
+            "enum": [
+              "active",
+              "suspended"
+            ]
           },
           "maxConcurrent": {
             "type": "integer",
@@ -2888,7 +3214,12 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["kpis", "board", "liveSessions", "agents"],
+  "required": [
+    "kpis",
+    "board",
+    "liveSessions",
+    "agents"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2906,7 +3237,11 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["modified", "added", "deleted"]
+      "enum": [
+        "modified",
+        "added",
+        "deleted"
+      ]
     },
     "additions": {
       "type": "integer",
@@ -2928,7 +3263,14 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["path", "status", "additions", "deletions", "aiAuthored", "lines"],
+  "required": [
+    "path",
+    "status",
+    "additions",
+    "deletions",
+    "aiAuthored",
+    "lines"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2943,19 +3285,35 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "kind": {
       "type": "string",
-      "enum": ["context", "add", "del", "hunk"]
+      "enum": [
+        "context",
+        "add",
+        "del",
+        "hunk"
+      ]
     },
     "oldNo": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "newNo": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "text": {
       "type": "string"
     }
   },
-  "required": ["kind", "oldNo", "newNo", "text"],
+  "required": [
+    "kind",
+    "oldNo",
+    "newNo",
+    "text"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2970,7 +3328,14 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "kind": {
       "type": "string",
-      "enum": ["screenshot", "trace", "console", "network", "log", "video"]
+      "enum": [
+        "screenshot",
+        "trace",
+        "console",
+        "network",
+        "log",
+        "video"
+      ]
     },
     "label": {
       "type": "string"
@@ -2979,7 +3344,11 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["kind", "label", "ref"],
+  "required": [
+    "kind",
+    "label",
+    "ref"
+  ],
   "additionalProperties": false
 }
 ```
@@ -2991,7 +3360,13 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/FailureClass",
   "type": "string",
-  "enum": ["product_defect", "test_defect", "environment", "flaky", "infrastructure"]
+  "enum": [
+    "product_defect",
+    "test_defect",
+    "environment",
+    "flaky",
+    "infrastructure"
+  ]
 }
 ```
 
@@ -3022,33 +3397,63 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "package": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "dependencyId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "affectedVersion": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "fixedVersion": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "advisoryId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "advisorySource": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "sourceUrl": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "confidence": {
       "type": "string",
-      "enum": ["high", "medium", "low"]
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "riskBand": {
       "type": "string",
-      "enum": ["urgent", "high", "medium", "low"]
+      "enum": [
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "status": {
       "$ref": "#/schemas/FindingStatus"
@@ -3087,7 +3492,12 @@ Reset all mock data to the seed (demo mode).
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             }
           },
-          "required": ["reason", "by", "at", "expiresAt"],
+          "required": [
+            "reason",
+            "by",
+            "at",
+            "expiresAt"
+          ],
           "additionalProperties": false
         },
         {
@@ -3096,7 +3506,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -3144,7 +3557,9 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["action"],
+      "required": [
+        "action"
+      ],
       "additionalProperties": false
     },
     {
@@ -3164,7 +3579,11 @@ Reset all mock data to the seed (demo mode).
           "maximum": 365
         }
       },
-      "required": ["action", "reason", "expiresInDays"],
+      "required": [
+        "action",
+        "reason",
+        "expiresInDays"
+      ],
       "additionalProperties": false
     },
     {
@@ -3175,7 +3594,9 @@ Reset all mock data to the seed (demo mode).
           "const": "unsuppress"
         }
       },
-      "required": ["action"],
+      "required": [
+        "action"
+      ],
       "additionalProperties": false
     }
   ]
@@ -3189,7 +3610,13 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/FindingCategory",
   "type": "string",
-  "enum": ["vulnerability", "outdated", "build", "tests", "docs"]
+  "enum": [
+    "vulnerability",
+    "outdated",
+    "build",
+    "tests",
+    "docs"
+  ]
 }
 ```
 
@@ -3234,7 +3661,13 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["finding", "dependency", "repository", "task", "similar"],
+  "required": [
+    "finding",
+    "dependency",
+    "repository",
+    "task",
+    "similar"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3266,33 +3699,63 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "package": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "dependencyId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "affectedVersion": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "fixedVersion": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "advisoryId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "advisorySource": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "sourceUrl": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "confidence": {
       "type": "string",
-      "enum": ["high", "medium", "low"]
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "riskBand": {
       "type": "string",
-      "enum": ["urgent", "high", "medium", "low"]
+      "enum": [
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "status": {
       "$ref": "#/schemas/FindingStatus"
@@ -3331,7 +3794,12 @@ Reset all mock data to the seed (demo mode).
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             }
           },
-          "required": ["reason", "by", "at", "expiresAt"],
+          "required": [
+            "reason",
+            "by",
+            "at",
+            "expiresAt"
+          ],
           "additionalProperties": false
         },
         {
@@ -3340,7 +3808,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
@@ -3396,7 +3867,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/FindingStatus",
   "type": "string",
-  "enum": ["open", "task_created", "suppressed", "resolved"]
+  "enum": [
+    "open",
+    "task_created",
+    "suppressed",
+    "resolved"
+  ]
 }
 ```
 
@@ -3413,10 +3889,16 @@ Reset all mock data to the seed (demo mode).
     },
     "kind": {
       "type": "string",
-      "enum": ["test", "scan"]
+      "enum": [
+        "test",
+        "scan"
+      ]
     }
   },
-  "required": ["repositoryId", "kind"],
+  "required": [
+    "repositoryId",
+    "kind"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3431,7 +3913,10 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "kind": {
       "type": "string",
-      "enum": ["test", "scan"]
+      "enum": [
+        "test",
+        "scan"
+      ]
     },
     "id": {
       "type": "string"
@@ -3440,7 +3925,11 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["kind", "id", "href"],
+  "required": [
+    "kind",
+    "id",
+    "href"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3489,7 +3978,10 @@ Reset all mock data to the seed (demo mode).
     },
     "state": {
       "type": "string",
-      "enum": ["open", "closed"]
+      "enum": [
+        "open",
+        "closed"
+      ]
     },
     "url": {
       "type": "string",
@@ -3501,7 +3993,10 @@ Reset all mock data to the seed (demo mode).
       "maximum": 9007199254740991
     },
     "importedTaskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
@@ -3587,7 +4082,14 @@ Reset all mock data to the seed (demo mode).
       "type": "boolean"
     }
   },
-  "required": ["fullName", "private", "language", "defaultBranch", "pushedAt", "alreadyConnected"],
+  "required": [
+    "fullName",
+    "private",
+    "language",
+    "defaultBranch",
+    "pushedAt",
+    "alreadyConnected"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3702,7 +4204,11 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     }
   },
-  "required": ["repositoryId", "weekStart", "score"],
+  "required": [
+    "repositoryId",
+    "weekStart",
+    "score"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3731,7 +4237,11 @@ Reset all mock data to the seed (demo mode).
       "type": "boolean"
     }
   },
-  "required": ["issueIds", "agentId", "launch"],
+  "required": [
+    "issueIds",
+    "agentId",
+    "launch"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3757,7 +4267,10 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["tasks", "skipped"],
+  "required": [
+    "tasks",
+    "skipped"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3781,7 +4294,11 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["connected", "disconnected", "error"]
+      "enum": [
+        "connected",
+        "disconnected",
+        "error"
+      ]
     },
     "account": {
       "type": "string"
@@ -3808,7 +4325,15 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["id", "orgId", "providerId", "status", "account", "connectedAt", "scopes"],
+  "required": [
+    "id",
+    "orgId",
+    "providerId",
+    "status",
+    "account",
+    "connectedAt",
+    "scopes"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3854,7 +4379,12 @@ Reset all mock data to the seed (demo mode).
     },
     "availability": {
       "type": "string",
-      "enum": ["available", "beta", "coming_soon", "enterprise"]
+      "enum": [
+        "available",
+        "beta",
+        "coming_soon",
+        "enterprise"
+      ]
     },
     "scopes": {
       "type": "array",
@@ -3922,10 +4452,22 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["pending", "accepted", "revoked"]
+      "enum": [
+        "pending",
+        "accepted",
+        "revoked"
+      ]
     }
   },
-  "required": ["id", "orgId", "email", "role", "invitedBy", "sentAt", "status"],
+  "required": [
+    "id",
+    "orgId",
+    "email",
+    "role",
+    "invitedBy",
+    "sentAt",
+    "status"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3945,10 +4487,17 @@ Reset all mock data to the seed (demo mode).
     },
     "role": {
       "type": "string",
-      "enum": ["admin", "member", "viewer"]
+      "enum": [
+        "admin",
+        "member",
+        "viewer"
+      ]
     }
   },
-  "required": ["email", "role"],
+  "required": [
+    "email",
+    "role"
+  ],
   "additionalProperties": false
 }
 ```
@@ -3972,7 +4521,11 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["paid", "open", "void"]
+      "enum": [
+        "paid",
+        "open",
+        "void"
+      ]
     },
     "subscriptionUsd": {
       "type": "number"
@@ -4013,23 +4566,50 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "key": {
       "type": "string",
-      "enum": ["plan", "execute", "propose", "verify", "remediate", "review", "merge", "maintain"]
+      "enum": [
+        "plan",
+        "execute",
+        "propose",
+        "verify",
+        "remediate",
+        "review",
+        "merge",
+        "maintain"
+      ]
     },
     "label": {
       "type": "string"
     },
     "state": {
       "type": "string",
-      "enum": ["done", "current", "upcoming", "failed", "skipped"]
+      "enum": [
+        "done",
+        "current",
+        "upcoming",
+        "failed",
+        "skipped"
+      ]
     },
     "detail": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "href": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "required": ["key", "label", "state", "detail", "href"],
+  "required": [
+    "key",
+    "label",
+    "state",
+    "detail",
+    "href"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4061,7 +4641,13 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     }
   },
-  "required": ["sessionId", "status", "lines", "progressPct", "redactions"],
+  "required": [
+    "sessionId",
+    "status",
+    "lines",
+    "progressPct",
+    "redactions"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4084,13 +4670,25 @@ Reset all mock data to the seed (demo mode).
     },
     "level": {
       "type": "string",
-      "enum": ["info", "tool", "warn", "error", "success", "approval"]
+      "enum": [
+        "info",
+        "tool",
+        "warn",
+        "error",
+        "success",
+        "approval"
+      ]
     },
     "text": {
       "type": "string"
     }
   },
-  "required": ["seq", "at", "level", "text"],
+  "required": [
+    "seq",
+    "at",
+    "level",
+    "text"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4128,10 +4726,21 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "lastActiveAt": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "required": ["id", "name", "email", "title", "role", "joinedAt", "lastActiveAt"],
+  "required": [
+    "id",
+    "name",
+    "email",
+    "title",
+    "role",
+    "joinedAt",
+    "lastActiveAt"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4160,10 +4769,18 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "seatsIncluded": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     }
   },
-  "required": ["members", "invitations", "seatsPurchased", "seatsIncluded"],
+  "required": [
+    "members",
+    "invitations",
+    "seatsPurchased",
+    "seatsIncluded"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4175,7 +4792,13 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/Meter",
   "type": "string",
-  "enum": ["agent_minutes", "browser_minutes", "test_runs", "scan_runs", "storage_gb"]
+  "enum": [
+    "agent_minutes",
+    "browser_minutes",
+    "test_runs",
+    "scan_runs",
+    "storage_gb"
+  ]
 }
 ```
 
@@ -4200,7 +4823,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "included": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "projected": {
       "type": "number"
@@ -4247,7 +4873,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["name", "description"],
+  "required": [
+    "name",
+    "description"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4316,23 +4945,42 @@ Reset all mock data to the seed (demo mode).
     "source": {
       "default": "manual",
       "type": "string",
-      "enum": ["manual", "github_issue", "linear", "jira", "shipsafe_failure", "codekeeper_finding"]
+      "enum": [
+        "manual",
+        "github_issue",
+        "linear",
+        "jira",
+        "shipsafe_failure",
+        "codekeeper_finding"
+      ]
     },
     "sourceRef": {
       "default": null,
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "bugId": {
       "default": null,
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "findingId": {
       "default": null,
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "parentTaskId": {
       "default": null,
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -4378,7 +5026,10 @@ Reset all mock data to the seed (demo mode).
       "type": "boolean"
     }
   },
-  "required": ["repositoryId", "branch"],
+  "required": [
+    "repositoryId",
+    "branch"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4398,7 +5049,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "userId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "kind": {
       "type": "string"
@@ -4421,7 +5075,17 @@ Reset all mock data to the seed (demo mode).
       "type": "boolean"
     }
   },
-  "required": ["id", "orgId", "userId", "kind", "title", "body", "href", "at", "read"],
+  "required": [
+    "id",
+    "orgId",
+    "userId",
+    "kind",
+    "title",
+    "body",
+    "href",
+    "at",
+    "read"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4439,7 +5103,9 @@ Reset all mock data to the seed (demo mode).
       "const": true
     }
   },
-  "required": ["ok"],
+  "required": [
+    "ok"
+  ],
   "additionalProperties": false
 }
 ```
@@ -4469,7 +5135,10 @@ Reset all mock data to the seed (demo mode).
     },
     "billingCycle": {
       "type": "string",
-      "enum": ["monthly", "annual"]
+      "enum": [
+        "monthly",
+        "annual"
+      ]
     },
     "createdAt": {
       "type": "string",
@@ -4501,7 +5170,11 @@ Reset all mock data to the seed (demo mode).
           }
         }
       },
-      "required": ["monthlyLimitUsd", "hardCap", "alertAtPct"],
+      "required": [
+        "monthlyLimitUsd",
+        "hardCap",
+        "alertAtPct"
+      ],
       "additionalProperties": false
     },
     "trialEndsAt": {
@@ -4558,7 +5231,11 @@ Reset all mock data to the seed (demo mode).
           }
         }
       },
-      "required": ["value", "previous", "weekly"],
+      "required": [
+        "value",
+        "previous",
+        "weekly"
+      ],
       "additionalProperties": false
     },
     "kpis": {
@@ -4577,7 +5254,10 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         },
         "avgHealth": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "passRatePct": {
           "type": "number"
@@ -4619,7 +5299,12 @@ Reset all mock data to the seed (demo mode).
             "type": "string"
           }
         },
-        "required": ["key", "label", "count", "href"],
+        "required": [
+          "key",
+          "label",
+          "count",
+          "href"
+        ],
         "additionalProperties": false
       }
     },
@@ -4657,7 +5342,11 @@ Reset all mock data to the seed (demo mode).
               "type": "number"
             }
           },
-          "required": ["running", "reviewReady", "successRatePct"],
+          "required": [
+            "running",
+            "reviewReady",
+            "successRatePct"
+          ],
           "additionalProperties": false
         },
         "shipsafe": {
@@ -4673,14 +5362,21 @@ Reset all mock data to the seed (demo mode).
               "type": "number"
             }
           },
-          "required": ["runsToday", "passRatePct", "openBugs"],
+          "required": [
+            "runsToday",
+            "passRatePct",
+            "openBugs"
+          ],
           "additionalProperties": false
         },
         "codekeeper": {
           "type": "object",
           "properties": {
             "avgHealth": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "openFindings": {
               "type": "number"
@@ -4689,11 +5385,19 @@ Reset all mock data to the seed (demo mode).
               "type": "number"
             }
           },
-          "required": ["avgHealth", "openFindings", "critical"],
+          "required": [
+            "avgHealth",
+            "openFindings",
+            "critical"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["devpilot", "shipsafe", "codekeeper"],
+      "required": [
+        "devpilot",
+        "shipsafe",
+        "codekeeper"
+      ],
       "additionalProperties": false
     },
     "setup": {
@@ -4714,7 +5418,12 @@ Reset all mock data to the seed (demo mode).
             "type": "string"
           }
         },
-        "required": ["key", "label", "done", "href"],
+        "required": [
+          "key",
+          "label",
+          "done",
+          "href"
+        ],
         "additionalProperties": false
       }
     }
@@ -4748,10 +5457,16 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "priceMonthlyUsd": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "priceAnnualMonthlyUsd": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "tagline": {
       "type": "string"
@@ -4766,28 +5481,52 @@ Reset all mock data to the seed (demo mode).
       "type": "object",
       "properties": {
         "projects": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "repositories": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "seats": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "agentMinutes": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "browserMinutes": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "testRuns": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "historyDays": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "concurrentSessions": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [
@@ -4831,7 +5570,14 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/PlanId",
   "type": "string",
-  "enum": ["free", "developer", "pro", "team", "business", "enterprise"]
+  "enum": [
+    "free",
+    "developer",
+    "pro",
+    "team",
+    "business",
+    "enterprise"
+  ]
 }
 ```
 
@@ -4906,7 +5652,11 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["logs", "artifacts", "audit"],
+      "required": [
+        "logs",
+        "artifacts",
+        "audit"
+      ],
       "additionalProperties": false
     }
   },
@@ -4943,13 +5693,23 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["passed", "failed", "pending", "missing"]
+      "enum": [
+        "passed",
+        "failed",
+        "pending",
+        "missing"
+      ]
     },
     "detail": {
       "type": "string"
     }
   },
-  "required": ["name", "required", "status", "detail"],
+  "required": [
+    "name",
+    "required",
+    "status",
+    "detail"
+  ],
   "additionalProperties": false
 }
 ```
@@ -5022,7 +5782,11 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["logs", "artifacts", "audit"],
+      "required": [
+        "logs",
+        "artifacts",
+        "audit"
+      ],
       "additionalProperties": false
     }
   },
@@ -5037,7 +5801,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/Priority",
   "type": "string",
-  "enum": ["urgent", "high", "medium", "low"]
+  "enum": [
+    "urgent",
+    "high",
+    "medium",
+    "low"
+  ]
 }
 ```
 
@@ -5073,7 +5842,14 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["id", "orgId", "name", "description", "color", "createdAt"],
+  "required": [
+    "id",
+    "orgId",
+    "name",
+    "description",
+    "color",
+    "createdAt"
+  ],
   "additionalProperties": false
 }
 ```
@@ -5120,7 +5896,14 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["project", "repositories", "tasks", "pullRequests", "runs", "findings"],
+  "required": [
+    "project",
+    "repositories",
+    "tasks",
+    "pullRequests",
+    "runs",
+    "findings"
+  ],
   "additionalProperties": false
 }
 ```
@@ -5160,7 +5943,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "healthScore": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "openPrs": {
       "type": "number"
@@ -5204,7 +5990,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/Provider",
   "type": "string",
-  "enum": ["claude_code", "openai_codex", "devin", "cursor"]
+  "enum": [
+    "claude_code",
+    "openai_codex",
+    "devin",
+    "cursor"
+  ]
 }
 ```
 
@@ -5242,16 +6033,26 @@ Reset all mock data to the seed (demo mode).
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["person", "agent"]
+          "enum": [
+            "person",
+            "agent"
+          ]
         },
         "id": {
           "type": "string"
         },
         "sessionId": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": ["type", "id", "sessionId"],
+      "required": [
+        "type",
+        "id",
+        "sessionId"
+      ],
       "additionalProperties": false
     },
     "openedBy": {
@@ -5270,7 +6071,11 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["open", "merged", "closed"]
+      "enum": [
+        "open",
+        "merged",
+        "closed"
+      ]
     },
     "openedAt": {
       "type": "string",
@@ -5290,7 +6095,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "mergedBy": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "aiAuthoredPct": {
       "type": "number",
@@ -5307,7 +6115,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "checkStatus": {
       "$ref": "#/schemas/TestRunStatus"
@@ -5320,10 +6131,17 @@ Reset all mock data to the seed (demo mode).
     },
     "reviewState": {
       "type": "string",
-      "enum": ["review_requested", "approved", "changes_requested"]
+      "enum": [
+        "review_requested",
+        "approved",
+        "changes_requested"
+      ]
     },
     "latestRunId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -5435,7 +6253,10 @@ Reset all mock data to the seed (demo mode).
             "maximum": 9007199254740991
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evidence": {
             "type": "array",
@@ -5548,16 +6369,26 @@ Reset all mock data to the seed (demo mode).
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["person", "agent"]
+          "enum": [
+            "person",
+            "agent"
+          ]
         },
         "id": {
           "type": "string"
         },
         "sessionId": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": ["type", "id", "sessionId"],
+      "required": [
+        "type",
+        "id",
+        "sessionId"
+      ],
       "additionalProperties": false
     },
     "openedBy": {
@@ -5576,7 +6407,11 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["open", "merged", "closed"]
+      "enum": [
+        "open",
+        "merged",
+        "closed"
+      ]
     },
     "openedAt": {
       "type": "string",
@@ -5596,7 +6431,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "mergedBy": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "aiAuthoredPct": {
       "type": "number",
@@ -5613,7 +6451,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "taskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "checkStatus": {
       "$ref": "#/schemas/TestRunStatus"
@@ -5626,10 +6467,17 @@ Reset all mock data to the seed (demo mode).
     },
     "reviewState": {
       "type": "string",
-      "enum": ["review_requested", "approved", "changes_requested"]
+      "enum": [
+        "review_requested",
+        "approved",
+        "changes_requested"
+      ]
     },
     "latestRunId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
@@ -5638,7 +6486,10 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/ResolvedActor"
     },
     "taskTitle": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "latestRun": {
       "anyOf": [
@@ -5711,10 +6562,18 @@ Reset all mock data to the seed (demo mode).
     },
     "scanSchedule": {
       "type": "string",
-      "enum": ["daily", "weekly", "on_push", "off"]
+      "enum": [
+        "daily",
+        "weekly",
+        "on_push",
+        "off"
+      ]
     }
   },
-  "required": ["testCommands", "scanSchedule"],
+  "required": [
+    "testCommands",
+    "scanSchedule"
+  ],
   "additionalProperties": false
 }
 ```
@@ -5769,7 +6628,10 @@ Reset all mock data to the seed (demo mode).
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["npm", "pypi"]
+        "enum": [
+          "npm",
+          "pypi"
+        ]
       }
     },
     "testCommands": {
@@ -5795,7 +6657,12 @@ Reset all mock data to the seed (demo mode).
     },
     "indexStatus": {
       "type": "string",
-      "enum": ["pending", "indexing", "ready", "error"]
+      "enum": [
+        "pending",
+        "indexing",
+        "ready",
+        "error"
+      ]
     },
     "indexReadyAt": {
       "type": "number"
@@ -5810,7 +6677,12 @@ Reset all mock data to the seed (demo mode).
     },
     "scanSchedule": {
       "type": "string",
-      "enum": ["daily", "weekly", "on_push", "off"]
+      "enum": [
+        "daily",
+        "weekly",
+        "on_push",
+        "off"
+      ]
     },
     "health": {
       "$ref": "#/schemas/Health"
@@ -5957,7 +6829,10 @@ Reset all mock data to the seed (demo mode).
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["npm", "pypi"]
+        "enum": [
+          "npm",
+          "pypi"
+        ]
       }
     },
     "testCommands": {
@@ -5983,7 +6858,12 @@ Reset all mock data to the seed (demo mode).
     },
     "indexStatus": {
       "type": "string",
-      "enum": ["pending", "indexing", "ready", "error"]
+      "enum": [
+        "pending",
+        "indexing",
+        "ready",
+        "error"
+      ]
     },
     "indexReadyAt": {
       "type": "number"
@@ -5998,7 +6878,12 @@ Reset all mock data to the seed (demo mode).
     },
     "scanSchedule": {
       "type": "string",
-      "enum": ["daily", "weekly", "on_push", "off"]
+      "enum": [
+        "daily",
+        "weekly",
+        "on_push",
+        "off"
+      ]
     },
     "health": {
       "$ref": "#/schemas/Health"
@@ -6016,10 +6901,16 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "lastRunStatus": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "lastRunAt": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "openPrs": {
       "type": "number"
@@ -6076,7 +6967,11 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["person", "agent", "system"]
+      "enum": [
+        "person",
+        "agent",
+        "system"
+      ]
     },
     "id": {
       "type": "string"
@@ -6088,7 +6983,12 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["type", "id", "name", "detail"],
+  "required": [
+    "type",
+    "id",
+    "name",
+    "detail"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6103,14 +7003,20 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "decision": {
       "type": "string",
-      "enum": ["approved", "changes_requested"]
+      "enum": [
+        "approved",
+        "changes_requested"
+      ]
     },
     "comment": {
       "default": "",
       "type": "string"
     }
   },
-  "required": ["decision", "comment"],
+  "required": [
+    "decision",
+    "comment"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6122,7 +7028,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/Role",
   "type": "string",
-  "enum": ["owner", "admin", "member", "viewer"]
+  "enum": [
+    "owner",
+    "admin",
+    "member",
+    "viewer"
+  ]
 }
 ```
 
@@ -6138,7 +7049,9 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/Role"
     }
   },
-  "required": ["role"],
+  "required": [
+    "role"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6166,11 +7079,21 @@ Reset all mock data to the seed (demo mode).
     },
     "status": {
       "type": "string",
-      "enum": ["queued", "running", "completed", "failed"]
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed"
+      ]
     },
     "trigger": {
       "type": "string",
-      "enum": ["schedule", "push", "manual", "onboarding"]
+      "enum": [
+        "schedule",
+        "push",
+        "manual",
+        "onboarding"
+      ]
     },
     "startedAt": {
       "type": "string",
@@ -6202,10 +7125,16 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "scoreAfter": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "scoreDelta": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "changes": {
       "type": "array",
@@ -6229,7 +7158,10 @@ Reset all mock data to the seed (demo mode).
           }
         }
       },
-      "required": ["ecosystems", "checks"],
+      "required": [
+        "ecosystems",
+        "checks"
+      ],
       "additionalProperties": false
     },
     "simulatedEndsAt": {
@@ -6265,7 +7197,15 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "kind": {
       "type": "string",
-      "enum": ["project", "repository", "task", "pull_request", "bug", "finding", "session"]
+      "enum": [
+        "project",
+        "repository",
+        "task",
+        "pull_request",
+        "bug",
+        "finding",
+        "session"
+      ]
     },
     "id": {
       "type": "string"
@@ -6280,7 +7220,13 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["kind", "id", "title", "subtitle", "href"],
+  "required": [
+    "kind",
+    "id",
+    "title",
+    "subtitle",
+    "href"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6344,7 +7290,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "summary": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "changedFiles": {
       "type": "array",
@@ -6370,7 +7319,10 @@ Reset all mock data to the seed (demo mode).
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["approval", "clarification"]
+              "enum": [
+                "approval",
+                "clarification"
+              ]
             },
             "approvalId": {
               "type": "string"
@@ -6379,7 +7331,9 @@ Reset all mock data to the seed (demo mode).
               "type": "string"
             }
           },
-          "required": ["kind"],
+          "required": [
+            "kind"
+          ],
           "additionalProperties": false
         },
         {
@@ -6388,7 +7342,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "notes": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "logSeed": {
       "type": "number"
@@ -6470,7 +7427,13 @@ Reset all mock data to the seed (demo mode).
       }
     }
   },
-  "required": ["session", "task", "workspace", "approvals", "otherAttempts"],
+  "required": [
+    "session",
+    "task",
+    "workspace",
+    "approvals",
+    "otherAttempts"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6536,12 +7499,22 @@ Reset all mock data to the seed (demo mode).
                   "$ref": "#/schemas/Role"
                 }
               },
-              "required": ["orgId", "name", "role"],
+              "required": [
+                "orgId",
+                "name",
+                "role"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["id", "name", "email", "title", "workspaces"],
+        "required": [
+          "id",
+          "name",
+          "email",
+          "title",
+          "workspaces"
+        ],
         "additionalProperties": false
       }
     },
@@ -6561,11 +7534,23 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["pendingApprovals", "reviewReady", "unreadNotifications", "pendingVisuals"],
+      "required": [
+        "pendingApprovals",
+        "reviewReady",
+        "unreadNotifications",
+        "pendingVisuals"
+      ],
       "additionalProperties": false
     }
   },
-  "required": ["user", "workspace", "role", "workspaces", "personas", "counts"],
+  "required": [
+    "user",
+    "workspace",
+    "role",
+    "workspaces",
+    "personas",
+    "counts"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6583,7 +7568,9 @@ Reset all mock data to the seed (demo mode).
       "minLength": 2
     }
   },
-  "required": ["answer"],
+  "required": [
+    "answer"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6647,7 +7634,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     },
     "summary": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "changedFiles": {
       "type": "array",
@@ -6673,7 +7663,10 @@ Reset all mock data to the seed (demo mode).
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["approval", "clarification"]
+              "enum": [
+                "approval",
+                "clarification"
+              ]
             },
             "approvalId": {
               "type": "string"
@@ -6682,7 +7675,9 @@ Reset all mock data to the seed (demo mode).
               "type": "string"
             }
           },
-          "required": ["kind"],
+          "required": [
+            "kind"
+          ],
           "additionalProperties": false
         },
         {
@@ -6691,7 +7686,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "notes": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "logSeed": {
       "type": "number"
@@ -6721,10 +7719,16 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/Agent"
     },
     "durationSec": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "workspaceState": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -6763,7 +7767,14 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/SessionStatus",
   "type": "string",
-  "enum": ["queued", "running", "waiting", "completed", "failed", "cancelled"]
+  "enum": [
+    "queued",
+    "running",
+    "waiting",
+    "completed",
+    "failed",
+    "cancelled"
+  ]
 }
 ```
 
@@ -6774,7 +7785,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/Severity",
   "type": "string",
-  "enum": ["critical", "high", "medium", "low"]
+  "enum": [
+    "critical",
+    "high",
+    "medium",
+    "low"
+  ]
 }
 ```
 
@@ -6801,7 +7817,11 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["date", "passRatePct", "runs"],
+        "required": [
+          "date",
+          "passRatePct",
+          "runs"
+        ],
         "additionalProperties": false
       }
     },
@@ -6853,7 +7873,10 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["classification", "count"],
+        "required": [
+          "classification",
+          "count"
+        ],
         "additionalProperties": false
       }
     },
@@ -6875,10 +7898,19 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           },
           "lastStatus": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "required": ["repositoryId", "name", "passRatePct", "runs", "lastStatus"],
+        "required": [
+          "repositoryId",
+          "name",
+          "passRatePct",
+          "runs",
+          "lastStatus"
+        ],
         "additionalProperties": false
       }
     },
@@ -6922,7 +7954,9 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["userId"],
+  "required": [
+    "userId"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6946,10 +7980,17 @@ Reset all mock data to the seed (demo mode).
     },
     "method": {
       "type": "string",
-      "enum": ["github", "email"]
+      "enum": [
+        "github",
+        "email"
+      ]
     }
   },
-  "required": ["name", "email", "method"],
+  "required": [
+    "name",
+    "email",
+    "method"
+  ],
   "additionalProperties": false
 }
 ```
@@ -6966,7 +8007,9 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["orgId"],
+  "required": [
+    "orgId"
+  ],
   "additionalProperties": false
 }
 ```
@@ -7019,7 +8062,10 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/TaskSource"
     },
     "sourceRef": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "createdBy": {
       "type": "string"
@@ -7030,7 +8076,10 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
     "agentId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "baseSha": {
       "type": "string",
@@ -7051,22 +8100,40 @@ Reset all mock data to the seed (demo mode).
       "exclusiveMinimum": 0
     },
     "parentTaskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "bugId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "findingId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "assigneeId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "clarityWarning": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -7108,7 +8175,14 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/TaskAction",
   "type": "string",
-  "enum": ["launch", "cancel", "retry", "create_pr", "mark_ready", "archive"]
+  "enum": [
+    "launch",
+    "cancel",
+    "retry",
+    "create_pr",
+    "mark_ready",
+    "archive"
+  ]
 }
 ```
 
@@ -7130,7 +8204,9 @@ Reset all mock data to the seed (demo mode).
       "type": "boolean"
     }
   },
-  "required": ["action"],
+  "required": [
+    "action"
+  ],
   "additionalProperties": false
 }
 ```
@@ -7202,7 +8278,10 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           },
           "summary": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "changedFiles": {
             "type": "array",
@@ -7228,7 +8307,10 @@ Reset all mock data to the seed (demo mode).
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "enum": ["approval", "clarification"]
+                    "enum": [
+                      "approval",
+                      "clarification"
+                    ]
                   },
                   "approvalId": {
                     "type": "string"
@@ -7237,7 +8319,9 @@ Reset all mock data to the seed (demo mode).
                     "type": "string"
                   }
                 },
-                "required": ["kind"],
+                "required": [
+                  "kind"
+                ],
                 "additionalProperties": false
               },
               {
@@ -7246,7 +8330,10 @@ Reset all mock data to the seed (demo mode).
             ]
           },
           "notes": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "logSeed": {
             "type": "number"
@@ -7396,7 +8483,12 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["allowed", "requiresApproval", "prohibited", "budgetRemainingUsd"],
+      "required": [
+        "allowed",
+        "requiresApproval",
+        "prohibited",
+        "budgetRemainingUsd"
+      ],
       "additionalProperties": false
     }
   },
@@ -7466,7 +8558,10 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/TaskSource"
     },
     "sourceRef": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "createdBy": {
       "type": "string"
@@ -7477,7 +8572,10 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
     "agentId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "baseSha": {
       "type": "string",
@@ -7498,22 +8596,40 @@ Reset all mock data to the seed (demo mode).
       "exclusiveMinimum": 0
     },
     "parentTaskId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "bugId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "findingId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "assigneeId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "clarityWarning": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
@@ -7565,7 +8681,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "latestRunStatus": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "costUsd": {
       "type": "number"
@@ -7623,7 +8742,14 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/TaskSource",
   "type": "string",
-  "enum": ["manual", "github_issue", "linear", "jira", "shipsafe_failure", "codekeeper_finding"]
+  "enum": [
+    "manual",
+    "github_issue",
+    "linear",
+    "jira",
+    "shipsafe_failure",
+    "codekeeper_finding"
+  ]
 }
 ```
 
@@ -7655,7 +8781,12 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/TestOutcome",
   "type": "string",
-  "enum": ["passed", "failed", "flaky", "skipped"]
+  "enum": [
+    "passed",
+    "failed",
+    "flaky",
+    "skipped"
+  ]
 }
 ```
 
@@ -7701,7 +8832,10 @@ Reset all mock data to the seed (demo mode).
       "maximum": 9007199254740991
     },
     "error": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "evidence": {
       "type": "array",
@@ -7757,7 +8891,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "trigger": {
       "type": "string"
@@ -7780,13 +8917,22 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         },
         "url": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "node": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "python": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "worker": {
           "type": "string"
@@ -7795,7 +8941,14 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["name", "url", "node", "python", "worker", "region"],
+      "required": [
+        "name",
+        "url",
+        "node",
+        "python",
+        "worker",
+        "region"
+      ],
       "additionalProperties": false
     },
     "status": {
@@ -7819,7 +8972,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "durationSec": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "selectedSuites": {
       "type": "array",
@@ -7833,12 +8989,18 @@ Reset all mock data to the seed (demo mode).
             "type": "string"
           }
         },
-        "required": ["suiteId", "reason"],
+        "required": [
+          "suiteId",
+          "reason"
+        ],
         "additionalProperties": false
       }
     },
     "retestOf": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "checkRun": {
       "anyOf": [
@@ -7852,7 +9014,11 @@ Reset all mock data to the seed (demo mode).
               "anyOf": [
                 {
                   "type": "string",
-                  "enum": ["success", "failure", "neutral"]
+                  "enum": [
+                    "success",
+                    "failure",
+                    "neutral"
+                  ]
                 },
                 {
                   "type": "null"
@@ -7863,7 +9029,11 @@ Reset all mock data to the seed (demo mode).
               "type": "string"
             }
           },
-          "required": ["name", "conclusion", "detailsUrl"],
+          "required": [
+            "name",
+            "conclusion",
+            "detailsUrl"
+          ],
           "additionalProperties": false
         },
         {
@@ -7887,7 +9057,12 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["passed", "failed", "flaky", "skipped"],
+      "required": [
+        "passed",
+        "failed",
+        "flaky",
+        "skipped"
+      ],
       "additionalProperties": false
     },
     "billedBrowserMinutes": {
@@ -7970,7 +9145,11 @@ Reset all mock data to the seed (demo mode).
           },
           "type": {
             "type": "string",
-            "enum": ["unit", "playwright", "api"]
+            "enum": [
+              "unit",
+              "playwright",
+              "api"
+            ]
           },
           "command": {
             "type": "string"
@@ -8081,7 +9260,10 @@ Reset all mock data to the seed (demo mode).
             "maximum": 9007199254740991
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evidence": {
             "type": "array",
@@ -8156,7 +9338,11 @@ Reset all mock data to the seed (demo mode).
               }
             }
           },
-          "required": ["newlyFailing", "fixed", "stillFailing"],
+          "required": [
+            "newlyFailing",
+            "fixed",
+            "stillFailing"
+          ],
           "additionalProperties": false
         },
         {
@@ -8210,7 +9396,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "trigger": {
       "type": "string"
@@ -8233,13 +9422,22 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         },
         "url": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "node": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "python": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "worker": {
           "type": "string"
@@ -8248,7 +9446,14 @@ Reset all mock data to the seed (demo mode).
           "type": "string"
         }
       },
-      "required": ["name", "url", "node", "python", "worker", "region"],
+      "required": [
+        "name",
+        "url",
+        "node",
+        "python",
+        "worker",
+        "region"
+      ],
       "additionalProperties": false
     },
     "status": {
@@ -8272,7 +9477,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "durationSec": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "selectedSuites": {
       "type": "array",
@@ -8286,12 +9494,18 @@ Reset all mock data to the seed (demo mode).
             "type": "string"
           }
         },
-        "required": ["suiteId", "reason"],
+        "required": [
+          "suiteId",
+          "reason"
+        ],
         "additionalProperties": false
       }
     },
     "retestOf": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "checkRun": {
       "anyOf": [
@@ -8305,7 +9519,11 @@ Reset all mock data to the seed (demo mode).
               "anyOf": [
                 {
                   "type": "string",
-                  "enum": ["success", "failure", "neutral"]
+                  "enum": [
+                    "success",
+                    "failure",
+                    "neutral"
+                  ]
                 },
                 {
                   "type": "null"
@@ -8316,7 +9534,11 @@ Reset all mock data to the seed (demo mode).
               "type": "string"
             }
           },
-          "required": ["name", "conclusion", "detailsUrl"],
+          "required": [
+            "name",
+            "conclusion",
+            "detailsUrl"
+          ],
           "additionalProperties": false
         },
         {
@@ -8340,7 +9562,12 @@ Reset all mock data to the seed (demo mode).
           "type": "number"
         }
       },
-      "required": ["passed", "failed", "flaky", "skipped"],
+      "required": [
+        "passed",
+        "failed",
+        "flaky",
+        "skipped"
+      ],
       "additionalProperties": false
     },
     "billedBrowserMinutes": {
@@ -8359,10 +9586,16 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestNumber": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "pullRequestTitle": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "failureClasses": {
       "type": "object",
@@ -8409,7 +9642,13 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/TestRunStatus",
   "type": "string",
-  "enum": ["queued", "running", "passed", "failed", "errored"]
+  "enum": [
+    "queued",
+    "running",
+    "passed",
+    "failed",
+    "errored"
+  ]
 }
 ```
 
@@ -8435,7 +9674,11 @@ Reset all mock data to the seed (demo mode).
     },
     "type": {
       "type": "string",
-      "enum": ["unit", "playwright", "api"]
+      "enum": [
+        "unit",
+        "playwright",
+        "api"
+      ]
     },
     "command": {
       "type": "string"
@@ -8510,7 +9753,11 @@ Reset all mock data to the seed (demo mode).
     },
     "type": {
       "type": "string",
-      "enum": ["unit", "playwright", "api"]
+      "enum": [
+        "unit",
+        "playwright",
+        "api"
+      ]
     },
     "command": {
       "type": "string",
@@ -8594,7 +9841,10 @@ Reset all mock data to the seed (demo mode).
       "type": "number"
     }
   },
-  "required": ["date", "value"],
+  "required": [
+    "date",
+    "value"
+  ],
   "additionalProperties": false
 }
 ```
@@ -8626,7 +9876,12 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     }
   },
-  "required": ["id", "name", "email", "title"],
+  "required": [
+    "id",
+    "name",
+    "email",
+    "title"
+  ],
   "additionalProperties": false
 }
 ```
@@ -8641,14 +9896,20 @@ Reset all mock data to the seed (demo mode).
   "properties": {
     "decision": {
       "type": "string",
-      "enum": ["approved", "rejected"]
+      "enum": [
+        "approved",
+        "rejected"
+      ]
     },
     "comment": {
       "default": "",
       "type": "string"
     }
   },
-  "required": ["decision", "comment"],
+  "required": [
+    "decision",
+    "comment"
+  ],
   "additionalProperties": false
 }
 ```
@@ -8671,7 +9932,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryId": {
       "type": "string"
@@ -8684,15 +9948,27 @@ Reset all mock data to the seed (demo mode).
     },
     "viewport": {
       "type": "string",
-      "enum": ["desktop", "mobile"]
+      "enum": [
+        "desktop",
+        "mobile"
+      ]
     },
     "theme": {
       "type": "string",
-      "enum": ["light", "dark"]
+      "enum": [
+        "light",
+        "dark"
+      ]
     },
     "status": {
       "type": "string",
-      "enum": ["unchanged", "changed", "new", "approved", "rejected"]
+      "enum": [
+        "unchanged",
+        "changed",
+        "new",
+        "approved",
+        "rejected"
+      ]
     },
     "diffPct": {
       "type": "number",
@@ -8717,7 +9993,12 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["x", "y", "w", "h"],
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
         "additionalProperties": false
       }
     },
@@ -8735,7 +10016,10 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^[0-9a-f]{7,40}$"
     },
     "decidedBy": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "decidedAt": {
       "anyOf": [
@@ -8750,7 +10034,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "comment": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -8795,7 +10082,10 @@ Reset all mock data to the seed (demo mode).
       "type": "string"
     },
     "pullRequestId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryId": {
       "type": "string"
@@ -8808,15 +10098,27 @@ Reset all mock data to the seed (demo mode).
     },
     "viewport": {
       "type": "string",
-      "enum": ["desktop", "mobile"]
+      "enum": [
+        "desktop",
+        "mobile"
+      ]
     },
     "theme": {
       "type": "string",
-      "enum": ["light", "dark"]
+      "enum": [
+        "light",
+        "dark"
+      ]
     },
     "status": {
       "type": "string",
-      "enum": ["unchanged", "changed", "new", "approved", "rejected"]
+      "enum": [
+        "unchanged",
+        "changed",
+        "new",
+        "approved",
+        "rejected"
+      ]
     },
     "diffPct": {
       "type": "number",
@@ -8841,7 +10143,12 @@ Reset all mock data to the seed (demo mode).
             "type": "number"
           }
         },
-        "required": ["x", "y", "w", "h"],
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
         "additionalProperties": false
       }
     },
@@ -8859,7 +10166,10 @@ Reset all mock data to the seed (demo mode).
       "pattern": "^[0-9a-f]{7,40}$"
     },
     "decidedBy": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "decidedAt": {
       "anyOf": [
@@ -8874,16 +10184,25 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "comment": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "repositoryName": {
       "type": "string"
     },
     "pullRequestNumber": {
-      "type": ["number", "null"]
+      "type": [
+        "number",
+        "null"
+      ]
     },
     "pullRequestTitle": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "decidedByUser": {
       "anyOf": [
@@ -8896,7 +10215,10 @@ Reset all mock data to the seed (demo mode).
       ]
     },
     "bugId": {
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -8947,14 +10269,21 @@ Reset all mock data to the seed (demo mode).
     },
     "runtime": {
       "type": "string",
-      "enum": ["container", "worktree"]
+      "enum": [
+        "container",
+        "worktree"
+      ]
     },
     "image": {
       "type": "string"
     },
     "state": {
       "type": "string",
-      "enum": ["provisioning", "active", "cleaned"]
+      "enum": [
+        "provisioning",
+        "active",
+        "cleaned"
+      ]
     },
     "cpu": {
       "type": "number"
@@ -8967,7 +10296,11 @@ Reset all mock data to the seed (demo mode).
     },
     "networkPolicy": {
       "type": "string",
-      "enum": ["none", "allowlist", "open"]
+      "enum": [
+        "none",
+        "allowlist",
+        "open"
+      ]
     },
     "createdAt": {
       "type": "string",
@@ -9018,7 +10351,11 @@ Reset all mock data to the seed (demo mode).
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "#/schemas/WorkspaceKind",
   "type": "string",
-  "enum": ["personal", "team", "agency"]
+  "enum": [
+    "personal",
+    "team",
+    "agency"
+  ]
 }
 ```
 
@@ -9037,7 +10374,10 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/Role"
     }
   },
-  "required": ["organization", "role"],
+  "required": [
+    "organization",
+    "role"
+  ],
   "additionalProperties": false
 }
 ```
