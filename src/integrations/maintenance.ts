@@ -1,5 +1,6 @@
 /** Periodic housekeeping per workspace: data retention and metered-usage reporting. */
 import type { StripeBilling } from "../connectors/stripe";
+import type { ArtifactStore } from "../platform/artifactStore";
 import type { Database } from "../platform/db";
 import type { Logger } from "../platform/logger";
 import type { TenantStore } from "../tenancy/store";
@@ -8,7 +9,13 @@ const DAY = 86_400_000;
 
 export class Maintenance {
   constructor(
-    private deps: { db: Database; store: TenantStore; billing: StripeBilling; log: Logger },
+    private deps: {
+      db: Database;
+      store: TenantStore;
+      billing: StripeBilling;
+      log: Logger;
+      artifacts: ArtifactStore;
+    },
   ) {}
 
   private async workspaces(): Promise<{ id: string; customer: string | null }[]> {
@@ -37,6 +44,13 @@ export class Maintenance {
           `DELETE FROM artifacts WHERE org_id = $1 AND created_at < now() - ($2::int * interval '1 day')`,
           [id, Math.max(1, Math.round(artifacts))],
         );
+        // Stored evidence files of runs that just passed the artifact retention age.
+        const artifactCutoff = now - Math.max(1, artifacts) * DAY;
+        for (const run of state.testRuns) {
+          const finished = run.finishedAt ? Date.parse(run.finishedAt) : NaN;
+          if (finished < artifactCutoff && finished >= artifactCutoff - 3 * DAY)
+            await this.deps.artifacts.removePrefix(`${id}/runs/${run.id}/`);
+        }
         const cutoff = now - Math.max(1, audit) * DAY;
         if (state.auditLogs.some((l) => Date.parse(l.at) < cutoff))
           await this.deps.store.write(id, (db) => {

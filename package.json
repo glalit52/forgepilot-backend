@@ -26,10 +26,12 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1167.0",
     "@electric-sql/pglite": "^0.5.16",
     "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.1",
     "fastify": "^5.12.8",
+    "jose": "^6.2.17",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "stripe": "^23.1.0",

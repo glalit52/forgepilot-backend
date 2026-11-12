@@ -83,6 +83,9 @@ export function connectorStatus(config: Config): ConnectorStatus[] {
         STRIPE_METERS: stripe.meters,
       },
     ),
+    check("artifacts", "File storage (S3)", "Test evidence files are kept on this server's disk.", {
+      S3_BUCKET: config.artifacts.driver === "s3" ? config.artifacts.s3.bucket : undefined,
+    }),
     check("email", "Email (Resend)", "Emails are logged instead of sent.", {
       RESEND_API_KEY: email.resendApiKey,
     }),

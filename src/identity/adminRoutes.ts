@@ -404,6 +404,51 @@ export const adminRoutes: GlobalRouteDef[] = [
   },
   {
     method: "GET",
+    path: "/admin/sso-domains",
+    auth: "staff",
+    summary: "Email domains workspaces want to use for single sign-on, pending ones first.",
+    response: z.array(
+      z.object({
+        domain: z.string(),
+        workspaceId: z.string(),
+        workspaceName: z.string(),
+        provider: z.string(),
+        status: z.enum(["pending", "approved", "rejected"]),
+        requestedBy: z.string(),
+        requestedAt: z.string(),
+      }),
+    ),
+    handler: (ctx) => ctx.app.sso.listDomains(),
+  },
+  {
+    method: "POST",
+    path: "/admin/sso-domains/:domain/decision",
+    auth: "staff",
+    summary:
+      "Approve or reject a domain claim. Approve only after confirming the workspace really controls that domain.",
+    request: ReasonSchema.extend({ decision: z.enum(["approved", "rejected"]) }),
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const input = body(
+        ReasonSchema.extend({ decision: z.enum(["approved", "rejected"]) }),
+        ctx.body,
+      );
+      const orgId = await ctx.app.sso.decide(
+        ctx.params.domain.toLowerCase(),
+        input.decision,
+        ctx.now,
+      );
+      await record(
+        ctx,
+        `sso.domain_${input.decision}`,
+        orgId,
+        `${ctx.params.domain}: ${input.reason}`,
+      );
+      return { ok: true };
+    },
+  },
+  {
+    method: "GET",
     path: "/admin/audit",
     auth: "staff",
     summary: "What staff did in the back-office, newest first. ?limit=",

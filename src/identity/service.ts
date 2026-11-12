@@ -5,7 +5,8 @@
  */
 import type { Organization, Role, User } from "../contract/schemas";
 import type { Persona, WorkspaceMembership } from "../domain/context";
-import { hashPassword, randomToken, sha256, verifyPassword } from "../platform/crypto";
+import { hashPassword, randomToken, sha256, verifyPassword, type Vault } from "../platform/crypto";
+import { generateTotpSecret, otpauthUrl, verifyTotp } from "../platform/totp";
 import type { Database, Queryable } from "../platform/db";
 import { HttpError } from "../platform/errors";
 import { newId } from "../platform/ids";
@@ -33,6 +34,8 @@ export function toUser(r: UserRow): User {
 export interface AuthenticatedSession {
   user: User;
   tokenHash: string;
+  /** The account has two-factor sign-in on and this session has not passed it yet. */
+  twoFactorPending: boolean;
 }
 
 export interface ApiKeyPrincipal {
@@ -49,7 +52,12 @@ export class IdentityService {
 
   constructor(
     private db: Database,
-    private opts: { sessionTtlDays: number; demoMode: boolean; platformAdmins?: string[] },
+    private opts: {
+      sessionTtlDays: number;
+      demoMode: boolean;
+      platformAdmins?: string[];
+      vault?: Vault;
+    },
   ) {}
 
   // ---------------------------------------------------------------- users
@@ -231,8 +239,11 @@ export class IdentityService {
   async isStaff(userId: string): Promise<boolean> {
     const admins = this.opts.platformAdmins ?? [];
     if (!admins.length) return false;
+    // Staff reach every customer, so a password alone is never enough: two-factor must be on.
+    // (A session that hasn't passed it is rejected before this check is reached.)
     const { rows } = await this.db.query<{ email_lower: string }>(
-      `SELECT email_lower FROM users WHERE id = $1 AND email_verified_at IS NOT NULL AND NOT is_demo`,
+      `SELECT email_lower FROM users
+       WHERE id = $1 AND email_verified_at IS NOT NULL AND totp_enabled_at IS NOT NULL AND NOT is_demo`,
       [userId],
     );
     return !!rows[0] && admins.includes(rows[0].email_lower);
@@ -262,8 +273,9 @@ export class IdentityService {
   async resolveSession(token: string | undefined): Promise<AuthenticatedSession | null> {
     if (!token || token.length < 20 || token.length > 200) return null;
     const tokenHash = sha256(token);
-    const { rows } = await this.db.query<UserRow>(
-      `SELECT u.id, u.email, u.name, u.title, u.github_login
+    const { rows } = await this.db.query<UserRow & { pending: boolean }>(
+      `SELECT u.id, u.email, u.name, u.title, u.github_login,
+              (u.totp_enabled_at IS NOT NULL AND s.two_factor_at IS NULL) AS pending
        FROM auth_sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = $1 AND s.expires_at > now()`,
       [tokenHash],
@@ -278,7 +290,102 @@ export class IdentityService {
         .query(`UPDATE auth_sessions SET last_seen_at = now() WHERE token_hash = $1`, [tokenHash])
         .catch(() => undefined);
     }
-    return { user: toUser(rows[0]), tokenHash };
+    return { user: toUser(rows[0]), tokenHash, twoFactorPending: rows[0].pending };
+  }
+
+  // ---------------------------------------------------------------- two-factor sign-in
+  private get vault(): Vault {
+    if (!this.opts.vault) throw new Error("Two-factor sign-in needs the credential vault");
+    return this.opts.vault;
+  }
+
+  async twoFactorStatus(userId: string): Promise<{ enabled: boolean; staffEligible: boolean }> {
+    const { rows } = await this.db.query<{
+      enabled: boolean;
+      email_lower: string;
+      verified: boolean;
+      is_demo: boolean;
+    }>(
+      `SELECT totp_enabled_at IS NOT NULL AS enabled, email_lower, email_verified_at IS NOT NULL AS verified, is_demo
+       FROM users WHERE id = $1`,
+      [userId],
+    );
+    const r = rows[0];
+    return {
+      enabled: !!r?.enabled,
+      staffEligible:
+        !!r && r.verified && !r.is_demo && (this.opts.platformAdmins ?? []).includes(r.email_lower),
+    };
+  }
+
+  /** Starts enrolment: stores a new secret (encrypted) that only becomes active once a code confirms it. */
+  async beginTwoFactor(user: User): Promise<{ secret: string; otpauthUrl: string }> {
+    const { enabled } = await this.twoFactorStatus(user.id);
+    if (enabled) throw new HttpError(409, "Two-factor sign-in is already on for this account");
+    const secret = generateTotpSecret();
+    await this.db.query(`UPDATE users SET totp_secret_ct = $2 WHERE id = $1`, [
+      user.id,
+      this.vault.encrypt(secret, `totp:${user.id}`),
+    ]);
+    return { secret, otpauthUrl: otpauthUrl(secret, user.email, "ForgePilot") };
+  }
+
+  /**
+   * Checks a code for the user. Each code works once: the step it belongs to is
+   * remembered, so a code that was observed can't be replayed.
+   */
+  private async checkTwoFactorCode(q: Queryable, userId: string, code: string): Promise<boolean> {
+    const { rows } = await q.query<{
+      totp_secret_ct: string | null;
+      totp_last_counter: number | null;
+    }>(`SELECT totp_secret_ct, totp_last_counter FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+    const r = rows[0];
+    if (!r?.totp_secret_ct) return false;
+    const counter = verifyTotp(this.vault.decrypt(r.totp_secret_ct, `totp:${userId}`), code);
+    if (counter === null || counter <= Number(r.totp_last_counter ?? -1)) return false;
+    await q.query(`UPDATE users SET totp_last_counter = $2 WHERE id = $1`, [userId, counter]);
+    return true;
+  }
+
+  /** Confirms enrolment with a first code and marks the current session as verified. */
+  async enableTwoFactor(userId: string, tokenHash: string, code: string): Promise<boolean> {
+    return this.db.tx(async (q) => {
+      if (!(await this.checkTwoFactorCode(q, userId, code))) return false;
+      await q.query(
+        `UPDATE users SET totp_enabled_at = COALESCE(totp_enabled_at, now()) WHERE id = $1`,
+        [userId],
+      );
+      await q.query(`UPDATE auth_sessions SET two_factor_at = now() WHERE token_hash = $1`, [
+        tokenHash,
+      ]);
+      // Other sessions were opened without the second factor: end them.
+      await q.query(`DELETE FROM auth_sessions WHERE user_id = $1 AND token_hash <> $2`, [
+        userId,
+        tokenHash,
+      ]);
+      return true;
+    });
+  }
+
+  async passTwoFactor(userId: string, tokenHash: string, code: string): Promise<boolean> {
+    return this.db.tx(async (q) => {
+      if (!(await this.checkTwoFactorCode(q, userId, code))) return false;
+      await q.query(`UPDATE auth_sessions SET two_factor_at = now() WHERE token_hash = $1`, [
+        tokenHash,
+      ]);
+      return true;
+    });
+  }
+
+  async disableTwoFactor(userId: string, code: string): Promise<boolean> {
+    return this.db.tx(async (q) => {
+      if (!(await this.checkTwoFactorCode(q, userId, code))) return false;
+      await q.query(
+        `UPDATE users SET totp_enabled_at = NULL, totp_secret_ct = NULL, totp_last_counter = NULL WHERE id = $1`,
+        [userId],
+      );
+      return true;
+    });
   }
 
   async destroySession(token: string | undefined) {

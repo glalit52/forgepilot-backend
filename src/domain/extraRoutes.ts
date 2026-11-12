@@ -64,6 +64,24 @@ function tracker(ctx: Ctx) {
 export const extraRoutes: RouteDef[] = [
   {
     method: "GET",
+    path: "/test-runs/:id/artifacts/:name",
+    auth: "member",
+    summary:
+      "A stored evidence file of a test run, e.g. a suite's full output (the `ref` of a result's evidence).",
+    response: z.object({ name: z.string(), contentType: z.string(), content: z.string() }),
+    handler: async (ctx) => {
+      // The run must belong to the caller's workspace before any storage lookup happens.
+      if (!ctx.db.testRuns.some((r) => r.id === ctx.params.id))
+        throw new HttpError(404, "Test run not found");
+      if (!/^[A-Za-z0-9_.-]{1,120}$/.test(ctx.params.name) || ctx.params.name.includes(".."))
+        throw new HttpError(404, "Artifact not found");
+      const file = await ctx.ports.artifacts.read(ctx.orgId, ctx.params.id, ctx.params.name);
+      if (!file) throw new HttpError(404, "Artifact not found");
+      return { name: ctx.params.name, ...file };
+    },
+  },
+  {
+    method: "GET",
     path: "/webhook-endpoints",
     auth: "integration.manage",
     summary: "Customer webhook endpoints that receive signed workspace events.",

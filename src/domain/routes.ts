@@ -2565,6 +2565,19 @@ export const routes: RouteDef[] = [
       } | null;
       // Secrets go to the vault (encrypted); the integration record only says that one exists.
       if (verified) await ctx.ports.credentials.put(tx(ctx), ctx.orgId, p.id, verified.credentials);
+      if (p.category === "identity") {
+        if (!verified)
+          throw new HttpError(
+            422,
+            "Single sign-on needs the issuer, client id, client secret and domain",
+          );
+        await ctx.ports.sso.claimDomain(tx(ctx), {
+          orgId: ctx.orgId,
+          providerId: p.id,
+          domain: verified.credentials.domain,
+          requester: me(ctx),
+        });
+      }
       const account = verified?.account ?? input.account;
       let i = ctx.db.integrations.find((x) => x.orgId === ctx.orgId && x.providerId === p.id);
       if (!i) {
@@ -2629,6 +2642,8 @@ export const routes: RouteDef[] = [
       await ctx.ports.credentials.remove(tx(ctx), ctx.orgId, ctx.params.providerId);
       if (ctx.params.providerId === "github")
         await ctx.ports.github.unlinkInstallations(tx(ctx), ctx.orgId);
+      if (providerById(ctx.params.providerId)?.category === "identity")
+        await ctx.ports.sso.removeDomains(tx(ctx), ctx.orgId);
       ctx.db.agents
         .filter((a) => a.orgId === ctx.orgId && a.provider === ctx.params.providerId)
         .forEach((a) => (a.status = "suspended"));

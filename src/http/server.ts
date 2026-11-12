@@ -36,6 +36,9 @@ interface Caller {
   /** Set when the request authenticated with an API key: pinned to one workspace and role. */
   apiKey?: { orgId: string; role: WorkspaceMembership["role"]; keyId: string };
   sessionToken?: string;
+  tokenHash?: string;
+  /** Signed in with a password but the two-factor code is still owed: may only reach the routes that collect it. */
+  twoFactorPending?: boolean;
 }
 
 declare module "fastify" {
@@ -187,6 +190,8 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
       user: session.user,
       workspaces: await app.identity.membershipsOf(session.user.id),
       sessionToken: token,
+      tokenHash: session.tokenHash,
+      twoFactorPending: session.twoFactorPending,
     };
   }
 
@@ -311,7 +316,7 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
       api.get("/events", async (req, reply) => {
         req.routeLabel = "/events";
         const caller = await authenticate(req);
-        if (!caller) throw new HttpError(401, "Not signed in");
+        if (!caller || caller.twoFactorPending) throw new HttpError(401, "Not signed in");
         const orgId = activeMembership(req, caller)?.organization.id;
         if (!orgId) throw new HttpError(403, "No workspace — finish onboarding first");
         await app.store.read(orgId);
@@ -401,6 +406,51 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
         }
       });
 
+      // ------------------------------------------------------------ single sign-on (OpenID Connect)
+      const SSO_COOKIE = "fp_sso";
+      api.get("/auth/sso/start", async (req, reply) => {
+        req.routeLabel = "/auth/sso/start";
+        rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
+        const email = String((req.query as { email?: string }).email ?? "");
+        const started = await app.sso.start(email).catch((err) => {
+          req.log.warn({ err }, "sso start failed");
+          return null;
+        });
+        if (!started) return reply.redirect(`${config.appUrl}/login?error=sso_unavailable`);
+        // The flow state stays in this browser only; the callback must present the same values.
+        reply.setCookie(SSO_COOKIE, JSON.stringify(started.flow), {
+          ...cookieOpts(600),
+          httpOnly: true,
+        });
+        return reply.redirect(started.url);
+      });
+      api.get("/auth/sso/callback", async (req, reply) => {
+        req.routeLabel = "/auth/sso/callback";
+        rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
+        const q = req.query as { code?: string; state?: string };
+        const raw = req.cookies[SSO_COOKIE];
+        reply.clearCookie(SSO_COOKIE, cookieOpts());
+        try {
+          const flow = JSON.parse(raw ?? "null") as import("../identity/sso").SsoFlowState | null;
+          if (!flow || !q.code || !q.state || !safeEqual(q.state, String(flow.state)))
+            throw new HttpError(401, "Sign-in state mismatch", undefined, "sso_failed");
+          const { user, orgId } = await app.sso.finish(flow, q.code);
+          setSessionCookie(
+            reply,
+            await app.identity.createSession(user.id, {
+              ip: req.ip,
+              userAgent: req.headers["user-agent"] ?? null,
+            }),
+          );
+          setWorkspaceCookie(reply, orgId);
+          return reply.redirect(`${config.appUrl}/app`);
+        } catch (err) {
+          const code = err instanceof HttpError ? err.code : "sso_failed";
+          if (!(err instanceof HttpError)) req.log.warn({ err }, "sso callback failed");
+          return reply.redirect(`${config.appUrl}/login?error=${encodeURIComponent(code)}`);
+        }
+      });
+
       // ------------------------------------------------------------ inbound webhooks
       api.post("/webhooks/github", async (req, reply) => {
         req.routeLabel = "/webhooks/github";
@@ -454,7 +504,21 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
             req.routeLabel = route.path;
             if (route.sensitive) rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
             assertSameSite(req);
-            const caller = await authenticate(req);
+            const signedIn = await authenticate(req);
+            if (
+              signedIn?.twoFactorPending &&
+              route.auth !== "public" &&
+              !route.allowPendingTwoFactor
+            )
+              throw new HttpError(
+                401,
+                "Enter your two-factor code to continue",
+                undefined,
+                "two_factor_required",
+              );
+            // To every other route a half-finished sign-in is the same as no sign-in.
+            const caller =
+              signedIn?.twoFactorPending && !route.allowPendingTwoFactor ? null : signedIn;
             if (route.auth !== "public" && !caller) throw new HttpError(401, "Not signed in");
             // The back-office answers 404 to everyone else, so its existence isn't advertised.
             if (
@@ -473,8 +537,10 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
               now,
               ip: req.ip,
               userAgent: req.headers["user-agent"] ?? null,
+              twoFactorPending: !!caller?.twoFactorPending,
               session: {
                 token: caller?.sessionToken,
+                tokenHash: caller?.tokenHash ?? null,
                 start: async (userId, orgId) => {
                   setSessionCookie(
                     reply,
@@ -523,6 +589,13 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
               await route.handler({ params, query, body: req.body, now } as never),
             );
           const caller = await authenticate(req);
+          if (caller?.twoFactorPending)
+            throw new HttpError(
+              401,
+              "Enter your two-factor code to continue",
+              undefined,
+              "two_factor_required",
+            );
           if (!caller) throw new HttpError(401, "Not signed in");
           const membership = activeMembership(req, caller);
           if (!membership) throw new HttpError(403, "No workspace — finish onboarding first");

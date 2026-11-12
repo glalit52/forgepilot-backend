@@ -1,12 +1,14 @@
 /** Staff back-office, suspension, deletion, retention, usage reporting and account-safety rules. */
 import type Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { totpCode, totpCounter } from "../src/platform/totp";
 import { createHarness, type Client, type Harness } from "./helpers";
 
 let h: Harness;
 let staff: Client;
 let owner: Client;
 let orgId: string;
+let staffSecret = "";
 const PASSWORD = "correct horse battery";
 const meterEvents: { event_name: string; identifier: string; payload: Record<string, string> }[] =
   [];
@@ -57,6 +59,20 @@ describe("staff back-office", () => {
     // Signing up with a staff address is not enough: the address must be proven.
     expect((await staff.get("/admin/overview")).status).toBe(404);
     await verify("boss@forgepilot.dev");
+    // A verified staff address still isn't enough: two-factor sign-in must be on.
+    expect((await staff.get("/admin/overview")).status).toBe(404);
+    expect((await staff.get("/auth/2fa/status")).body).toEqual({
+      enabled: false,
+      verified: false,
+      staffEligible: true,
+    });
+    const setup = (await staff.post("/auth/2fa/setup")).body;
+    expect(setup.otpauthUrl).toContain(`secret=${setup.secret}`);
+    expect((await staff.post("/auth/2fa/enable", { code: "000000" })).status).toBe(400);
+    expect((await staff.get("/admin/overview")).status).toBe(404);
+    const code = totpCode(setup.secret, totpCounter());
+    expect((await staff.post("/auth/2fa/enable", { code })).status).toBe(200);
+    staffSecret = setup.secret;
     const overview = await staff.get("/admin/overview");
     expect(overview.status, JSON.stringify(overview.body)).toBe(200);
     expect(overview.body).toMatchObject({
@@ -132,6 +148,44 @@ describe("staff back-office", () => {
     expect((await staff.post(`/admin/jobs/${failed[0].id}/retry`)).status).toBe(200);
     expect((await staff.post(`/admin/jobs/${failed[0].id}/retry`)).status).toBe(404);
     await h.app.db.query(`DELETE FROM jobs WHERE kind = 'test.noop'`);
+  });
+});
+
+describe("two-factor sign-in", () => {
+  it("holds a new session until the code is given, and never accepts the same code twice", async () => {
+    const c = h.client();
+    const login = await c.post("/auth/login", { email: "boss@forgepilot.dev", password: PASSWORD });
+    expect(login.body.twoFactorRequired).toBe(true);
+    // Signed in with the password only: nothing works yet, staff or otherwise.
+    const blocked = await c.get("/me");
+    expect(blocked.status).toBe(401);
+    expect(blocked.body.code).toBe("two_factor_required");
+    expect((await c.get("/admin/overview")).status).toBe(401);
+    expect((await c.get("/session/status")).body.signedIn).toBe(false);
+    expect((await c.get("/auth/2fa/status")).body).toMatchObject({
+      enabled: true,
+      verified: false,
+    });
+
+    // The code used at enrolment is spent; the next step's code is accepted once.
+    const used = totpCode(staffSecret, totpCounter());
+    expect((await c.post("/auth/2fa/verify", { code: used })).status).toBe(400);
+    const next = totpCode(staffSecret, totpCounter() + 1);
+    expect((await c.post("/auth/2fa/verify", { code: next })).status).toBe(200);
+    expect((await c.get("/admin/overview")).status).toBe(200);
+    const other = h.client();
+    await other.post("/auth/login", { email: "boss@forgepilot.dev", password: PASSWORD });
+    expect((await other.post("/auth/2fa/verify", { code: next })).status).toBe(400);
+  });
+
+  it("stores the secret encrypted", async () => {
+    const row = (
+      await h.app.db.query<{ totp_secret_ct: string }>(
+        `SELECT totp_secret_ct FROM users WHERE email_lower = 'boss@forgepilot.dev'`,
+      )
+    ).rows[0];
+    expect(row.totp_secret_ct).toMatch(/^v1\./);
+    expect(row.totp_secret_ct).not.toContain(staffSecret);
   });
 });
 

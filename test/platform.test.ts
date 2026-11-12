@@ -506,3 +506,37 @@ describe("parsers", () => {
     expect(slow.durationMs).toBeLessThan(5000);
   });
 });
+
+describe("one-time codes", () => {
+  it("matches the RFC 6238 reference values and tolerates one step of clock drift", async () => {
+    const { base32Encode, totpCode, verifyTotp } = await import("../src/platform/totp");
+    // RFC 6238 appendix B, SHA-1, secret "12345678901234567890" (8-digit values truncated to 6).
+    const secret = base32Encode(Buffer.from("12345678901234567890"));
+    expect(totpCode(secret, Math.floor(59 / 30))).toBe("287082");
+    expect(totpCode(secret, Math.floor(1111111109 / 30))).toBe("081804");
+    expect(totpCode(secret, Math.floor(20000000000 / 30))).toBe("353130");
+    const now = 1111111109_000;
+    expect(verifyTotp(secret, "081804", now)).toBe(Math.floor(1111111109 / 30));
+    expect(verifyTotp(secret, "081804", now + 30_000)).not.toBeNull();
+    expect(verifyTotp(secret, "081804", now + 90_000)).toBeNull();
+    expect(verifyTotp(secret, "08180", now)).toBeNull();
+  });
+});
+
+describe("artifact storage", () => {
+  it("stores, reads and removes files, and refuses keys that escape the store", async () => {
+    const { LocalArtifactStore, assertSafeKey } = await import("../src/platform/artifactStore");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const store = new LocalArtifactStore(mkdtempSync(join(tmpdir(), "fp-store-")));
+    await store.put("ws_1/runs/run_1/out.log", "hello", "text/plain");
+    expect((await store.get("ws_1/runs/run_1/out.log"))!.body.toString()).toBe("hello");
+    expect((await store.get("ws_1/runs/run_1/out.log"))!.contentType).toBe("text/plain");
+    expect(await store.get("ws_1/runs/run_1/missing.log")).toBeNull();
+    await store.removePrefix("ws_1/");
+    expect(await store.get("ws_1/runs/run_1/out.log")).toBeNull();
+    for (const bad of ["../etc/passwd", "ws_1/../ws_2/x", "/abs/path", "ws_1//x", ""])
+      expect(() => assertSafeKey(bad), bad).toThrow();
+  });
+});
