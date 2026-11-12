@@ -105,6 +105,8 @@ export const AuthOptionsSchema = z.object({
   github: z.boolean(),
   githubSignInUrl: z.string().nullable(),
   githubAppInstallUrl: z.string().nullable(),
+  /** Where "Sign in with SSO" sends the browser (real backend only). */
+  ssoSignInUrl: z.string().nullable().optional(),
 });
 export type AuthOptions = z.infer<typeof AuthOptionsSchema>;
 
@@ -112,7 +114,12 @@ export const LoginInputSchema = z.object({
   email: z.email("Enter a valid email"),
   password: z.string().min(1, "Enter your password").max(200),
 });
-export const AuthResultSchema = z.object({ user: UserSchema, hasWorkspace: z.boolean() });
+export const AuthResultSchema = z.object({
+  user: UserSchema,
+  hasWorkspace: z.boolean(),
+  /** The account has two-factor sign-in on: a 6-digit code is needed before anything else works. */
+  twoFactorRequired: z.boolean().optional(),
+});
 
 export const CreateWorkspaceInputSchema = z.object({
   name: z.string().trim().min(2, "Name your workspace").max(48),

@@ -2116,6 +2116,12 @@ Reset all mock data to the seed (demo mode).
         "string",
         "null"
       ]
+    },
+    "ssoSignInUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -2141,6 +2147,9 @@ Reset all mock data to the seed (demo mode).
       "$ref": "#/schemas/User"
     },
     "hasWorkspace": {
+      "type": "boolean"
+    },
+    "twoFactorRequired": {
       "type": "boolean"
     }
   },
