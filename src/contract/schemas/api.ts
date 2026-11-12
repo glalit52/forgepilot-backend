@@ -91,8 +91,28 @@ export const SignUpInputSchema = z.object({
   name: z.string().trim().min(2, "Enter your name"),
   email: z.email("Enter a valid work email"),
   method: z.enum(["github", "email"]),
+  /** Required by the real backend for email sign-up; the demo has no passwords. */
+  password: z.string().min(10, "Use at least 10 characters").max(200).optional(),
+  /** Joins the inviting workspace right after the account is created. */
+  invitationToken: z.string().optional(),
 });
 export type SignUpInput = z.infer<typeof SignUpInputSchema>;
+
+/** Which sign-in methods the API offers: the demo uses personas, a real deployment passwords and GitHub. */
+export const AuthOptionsSchema = z.object({
+  demo: z.boolean(),
+  password: z.boolean(),
+  github: z.boolean(),
+  githubSignInUrl: z.string().nullable(),
+  githubAppInstallUrl: z.string().nullable(),
+});
+export type AuthOptions = z.infer<typeof AuthOptionsSchema>;
+
+export const LoginInputSchema = z.object({
+  email: z.email("Enter a valid email"),
+  password: z.string().min(1, "Enter your password").max(200),
+});
+export const AuthResultSchema = z.object({ user: UserSchema, hasWorkspace: z.boolean() });
 
 export const CreateWorkspaceInputSchema = z.object({
   name: z.string().trim().min(2, "Name your workspace").max(48),
@@ -700,6 +720,10 @@ export const ApiKeyCreatedSchema = z.object({ key: ApiKeySchema, secret: z.strin
 
 export const ConnectIntegrationInputSchema = z.object({
   account: z.string().trim().min(2, "Enter the account or workspace"),
+  /** GitHub App installation id that GitHub sends back after installing (real backend only). */
+  installationId: z.coerce.number().int().positive().optional(),
+  /** Provider secret (API key, webhook URL…). Sent once, stored encrypted, never returned. */
+  credentials: z.record(z.string(), z.string().min(1).max(4000)).optional(),
 });
 
 export const WorkspacePatchSchema = z.object({ name: z.string().trim().min(2).max(48).optional() });

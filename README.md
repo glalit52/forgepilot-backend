@@ -18,7 +18,7 @@ DEMO_MODE=true pnpm dev
 
 The API is at <http://localhost:8080/api/v1>. With `DEMO_MODE=true` it loads the same fictional workspaces the web app was designed against, and agents, test runs and scans are simulated, so every flow works without any external account.
 
-To point the web app at it, add a rewrite in the frontend's `next.config.ts` from `/api/v1/:path*` to `http://localhost:8080/api/v1/:path*` and set `NEXT_PUBLIC_API_BASE=/api/v1`. Same-origin matters: the session cookie is `HttpOnly` and `SameSite=Lax`.
+To point the web app at it, start the frontend with `BACKEND_URL=http://localhost:8080 NEXT_PUBLIC_API_BASE=/api/v1`. It proxies API calls through its own address, which matters because the session cookie is `HttpOnly` and `SameSite=Lax`.
 
 With real Postgres, and the API and workers as separate processes:
 
@@ -84,7 +84,7 @@ Stated plainly so nobody is surprised later:
 - **Rate limits are per process.** Behind several API instances, move the counter to Redis.
 - **The egress allowlist is not enforced** in the sandbox (network is on or off); that needs a proxy.
 - **Demo mode has passwordless persona sign-in** and must never run with customer data. In production it refuses to start with a real database unless explicitly allowed.
-- **The web app needs three small changes for real accounts:** send a password on sign-up, call `/auth/login` and `/auth/logout` (the session cookie can't be cleared from page scripts), and pass GitHub's `installation_id` to `/github/install`.
+- **The web app side is in [forgepilot-frontend#2](https://github.com/glalit52/forgepilot-frontend/pull/2)**: password sign-up, real sign-in and sign-out, and GitHub App installation. GitHub sign-in and the install redirect still need real GitHub credentials to be tried.
 - Not built yet: metered usage reporting to Stripe, artifact storage (S3) for screenshots and traces, OpenTelemetry tracing, SSO/SCIM.
 
 ## Configuration

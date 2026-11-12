@@ -82,8 +82,8 @@ const SignUpSchema = S.SignUpInputSchema.extend({
   password: PasswordSchema.optional(),
   invitationToken: z.string().optional(),
 });
-const LoginSchema = z.object({ email: z.email(), password: z.string().min(1).max(200) });
-const AuthResultSchema = z.object({ user: S.UserSchema, hasWorkspace: z.boolean() });
+const LoginSchema = S.LoginInputSchema;
+const AuthResultSchema = S.AuthResultSchema;
 const PersonaSchema = S.UserSchema.extend({
   workspaces: z.array(z.object({ orgId: z.string(), name: z.string(), role: S.RoleSchema })),
 });
@@ -273,13 +273,7 @@ export const identityRoutes: GlobalRouteDef[] = [
     auth: "public",
     summary:
       "Which sign-in methods this deployment offers, so the web app shows the right screens.",
-    response: z.object({
-      demo: z.boolean(),
-      password: z.boolean(),
-      github: z.boolean(),
-      githubSignInUrl: z.string().nullable(),
-      githubAppInstallUrl: z.string().nullable(),
-    }),
+    response: S.AuthOptionsSchema,
     handler: async (ctx) => ({
       demo: ctx.app.config.demoMode,
       password: !ctx.app.config.demoMode,

@@ -103,6 +103,9 @@ Guardrails the backend must enforce (not just the UI):
 | GET | `/notifications` | Any workspace member | — | `Notification[]` | Notifications for the active workspace. |
 | POST | `/notifications/read` | Any workspace member | see below | `Ok` | Mark notifications read. Body { ids?: string[] }. |
 | GET | `/search` | Any workspace member | — | `SearchResult[]` | Search projects, repositories, tasks, PRs, bugs, findings and sessions. ?q= |
+| GET | `/auth/options` | None | — | `AuthOptions` | Which sign-in methods this API offers. The mock is always a demo; the real backend reports password and GitHub sign-in. |
+| POST | `/auth/login` | None | `LoginInput` | `AuthResult` | Sign in with email and password (real backend). The demo has no passwords. |
+| POST | `/auth/logout` | None | — | `Ok` | End the current session and clear the session cookies. |
 | POST | `/demo/reset` | None | — | `Ok` | Reset all mock data to the seed (demo mode). |
 
 ## Endpoint details
@@ -1318,6 +1321,28 @@ Search projects, repositories, tasks, PRs, bugs, findings and sessions. ?q=
 - **Auth:** Any workspace member
 - **Response 200:** [`SearchResult[]`](#searchresult)
 
+### GET `/auth/options`
+
+Which sign-in methods this API offers. The mock is always a demo; the real backend reports password and GitHub sign-in.
+
+- **Auth:** None
+- **Response 200:** [`AuthOptions`](#authoptions)
+
+### POST `/auth/login`
+
+Sign in with email and password (real backend). The demo has no passwords.
+
+- **Auth:** None
+- **Request body:** [`LoginInput`](#logininput)
+- **Response 200:** [`AuthResult`](#authresult)
+
+### POST `/auth/logout`
+
+End the current session and clear the session cookies.
+
+- **Auth:** None
+- **Response 200:** [`Ok`](#ok)
+
 ### POST `/demo/reset`
 
 Reset all mock data to the seed (demo mode).
@@ -2058,6 +2083,70 @@ Reset all mock data to the seed (demo mode).
     "detail",
     "href",
     "severity"
+  ],
+  "additionalProperties": false
+}
+```
+
+### AuthOptions
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "#/schemas/AuthOptions",
+  "type": "object",
+  "properties": {
+    "demo": {
+      "type": "boolean"
+    },
+    "password": {
+      "type": "boolean"
+    },
+    "github": {
+      "type": "boolean"
+    },
+    "githubSignInUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "githubAppInstallUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "demo",
+    "password",
+    "github",
+    "githubSignInUrl",
+    "githubAppInstallUrl"
+  ],
+  "additionalProperties": false
+}
+```
+
+### AuthResult
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "#/schemas/AuthResult",
+  "type": "object",
+  "properties": {
+    "user": {
+      "$ref": "#/schemas/User"
+    },
+    "hasWorkspace": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "user",
+    "hasWorkspace"
   ],
   "additionalProperties": false
 }
@@ -2916,6 +3005,22 @@ Reset all mock data to the seed (demo mode).
     "account": {
       "type": "string",
       "minLength": 2
+    },
+    "installationId": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "credentials": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000
+      }
     }
   },
   "required": [
@@ -4688,6 +4793,33 @@ Reset all mock data to the seed (demo mode).
     "at",
     "level",
     "text"
+  ],
+  "additionalProperties": false
+}
+```
+
+### LoginInput
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "#/schemas/LoginInput",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "email",
+    "password"
   ],
   "additionalProperties": false
 }
@@ -7984,6 +8116,14 @@ Reset all mock data to the seed (demo mode).
         "github",
         "email"
       ]
+    },
+    "password": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "invitationToken": {
+      "type": "string"
     }
   },
   "required": [
