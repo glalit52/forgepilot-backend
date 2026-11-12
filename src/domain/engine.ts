@@ -122,9 +122,16 @@ export class Engine {
       const prepared = route.prepare ? await route.prepare(ctxFor(snapshot)) : undefined;
       result = await route.handler(ctxFor(snapshot, prepared));
     } else {
-      const prepared = route.prepare
-        ? await route.prepare(ctxFor(await this.store.read(principal.orgId)))
-        : undefined;
+      const snapshot = await this.store.read(principal.orgId);
+      // A suspended workspace stays readable (and exportable) but cannot change anything.
+      if (this.store.suspension(principal.orgId) !== null)
+        throw new HttpError(
+          403,
+          "This workspace is suspended and read-only. Contact support to restore it.",
+          undefined,
+          "workspace_suspended",
+        );
+      const prepared = route.prepare ? await route.prepare(ctxFor(snapshot)) : undefined;
       result = await this.store.write(principal.orgId, (draft) => {
         bindRequest(draft, { ip: req.ip });
         // Bring time-driven state up to date first so the handler never acts on stale statuses.

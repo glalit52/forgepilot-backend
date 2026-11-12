@@ -20,6 +20,7 @@ import { SESSION_COOKIE, WORKSPACE_COOKIE } from "../contract/domain/permissions
 import type { User } from "../contract/schemas";
 import type { RouteDef, WorkspaceMembership } from "../domain/context";
 import { RouteTable } from "../domain/engine";
+import { adminRoutes } from "../identity/adminRoutes";
 import { identityRoutes, type GlobalCtx, type GlobalRouteDef } from "../identity/routes";
 import { randomToken, safeEqual } from "../platform/crypto";
 import { HttpError } from "../platform/errors";
@@ -57,7 +58,8 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
     },
   });
   const limiter = new RateLimiter();
-  const globalTable = new RouteTable(identityRoutes as unknown as RouteDef[]);
+  const accountRoutes = [...identityRoutes, ...adminRoutes];
+  const globalTable = new RouteTable(accountRoutes as unknown as RouteDef[]);
   const allowedOrigins = new Set([new URL(config.appUrl).origin, ...config.corsOrigins]);
 
   await server.register(cookie);
@@ -453,8 +455,13 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
             if (route.sensitive) rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
             assertSameSite(req);
             const caller = await authenticate(req);
-            if (route.auth === "authenticated" && !caller)
-              throw new HttpError(401, "Not signed in");
+            if (route.auth !== "public" && !caller) throw new HttpError(401, "Not signed in");
+            // The back-office answers 404 to everyone else, so its existence isn't advertised.
+            if (
+              route.auth === "staff" &&
+              (caller!.apiKey || !(await app.identity.isStaff(caller!.user.id)))
+            )
+              throw new HttpError(404, `No route for ${req.method} ${path}`);
             const ctx: GlobalCtx = {
               app,
               user: caller?.user ?? null,

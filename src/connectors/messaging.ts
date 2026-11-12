@@ -86,6 +86,11 @@ export const EMAIL_TEMPLATES: Record<string, (d: TemplateData) => Omit<EmailMess
     text: `Hi ${d.name},\n\nReset your password: ${d.link}\n\nThe link works once and expires in an hour. If you didn't ask for this, ignore this email.`,
     html: `<p>Hi ${escapeHtml(d.name)},</p><p><a href="${escapeHtml(d.link)}">Reset your password</a></p><p>The link works once and expires in an hour. If you didn't ask for this, ignore this email.</p>`,
   }),
+  verify_email: (d) => ({
+    subject: "Confirm your email for ForgePilot",
+    text: `Hi ${d.name},\n\nConfirm your email address: ${d.link}\n\nThe link expires in 3 days.`,
+    html: `<p>Hi ${escapeHtml(d.name)},</p><p><a href="${escapeHtml(d.link)}">Confirm your email address</a></p><p>The link expires in 3 days.</p>`,
+  }),
   notification: (d) => ({
     subject: d.title,
     text: `${d.title}\n\n${d.body}\n\n${d.link}`,

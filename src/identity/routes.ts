@@ -36,7 +36,8 @@ export interface GlobalCtx {
 export interface GlobalRouteDef {
   method: "GET" | "POST";
   path: string;
-  auth: "public" | "authenticated";
+  /** staff = ForgePilot employees on the PLATFORM_ADMIN_EMAILS list. */
+  auth: "public" | "authenticated" | "staff";
   summary: string;
   request?: z.ZodType;
   response: z.ZodType;
@@ -121,6 +122,18 @@ async function acceptInvitation(ctx: GlobalCtx, user: User, token: string): Prom
     await ctx.app.identity.revokeInvitation(effects.q!, inv.orgId, inv.invitationId);
   });
   return inv.orgId;
+}
+
+async function sendVerification(ctx: GlobalCtx, user: User) {
+  const token = await ctx.app.identity.issueEmailVerification(user.id);
+  await ctx.app.enqueue({
+    kind: "email.send",
+    payload: {
+      to: user.email,
+      template: "verify_email",
+      data: { name: user.name, link: `${ctx.app.config.appUrl}/verify-email?token=${token}` },
+    },
+  });
 }
 
 export const identityRoutes: GlobalRouteDef[] = [
@@ -219,6 +232,7 @@ export const identityRoutes: GlobalRouteDef[] = [
         password: input.password,
         githubLogin: demoMode && input.method === "github" ? input.email.split("@")[0] : undefined,
       });
+      if (!demoMode) await sendVerification(ctx, user);
       let orgId = "";
       if (input.invitationToken) orgId = await acceptInvitation(ctx, user, input.invitationToken);
       await ctx.session.start(user.id, orgId);
@@ -369,6 +383,114 @@ export const identityRoutes: GlobalRouteDef[] = [
       );
       if (!(await ctx.app.identity.consumePasswordReset(input.token, input.password)))
         throw new HttpError(400, "This reset link is invalid or has expired");
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/auth/verify-email",
+    auth: "public",
+    sensitive: true,
+    summary: "Confirm ownership of an email address with the token from the verification email.",
+    request: z.object({ token: z.string().min(20) }),
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const { token } = body(z.object({ token: z.string().min(20) }), ctx.body);
+      if (!(await ctx.app.identity.verifyEmail(token)))
+        throw new HttpError(400, "This verification link is invalid or has expired");
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/auth/verify-email/resend",
+    auth: "authenticated",
+    sensitive: true,
+    summary: "Send the verification email again.",
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      await sendVerification(ctx, me(ctx));
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/workspace/delete",
+    auth: "authenticated",
+    sensitive: true,
+    summary:
+      "Permanently delete the active workspace and everything in it. Owners only; the workspace name must be typed to confirm.",
+    request: z.object({ confirm: z.string() }),
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const user = me(ctx);
+      const { confirm } = body(z.object({ confirm: z.string() }), ctx.body);
+      const membership = ctx.workspaces.find((w) => w.organization.id === ctx.activeOrgId);
+      if (!membership) throw new HttpError(403, "No workspace — finish onboarding first");
+      if (membership.role !== "owner")
+        throw new HttpError(403, "Only an owner can delete the workspace");
+      const org = membership.organization;
+      if (confirm.trim() !== org.name)
+        throw new HttpError(422, "Type the workspace name exactly to confirm");
+      // End the subscription first so nobody keeps paying for a workspace that no longer exists.
+      if (ctx.app.billing.configured)
+        await ctx.app.billing.changePlan({
+          org,
+          plan: "free",
+          billingCycle: org.billingCycle,
+          userEmail: user.email,
+        });
+      await ctx.app.db.tx(async (q) => {
+        await q.query(`DELETE FROM jobs WHERE org_id = $1 AND status IN ('queued', 'failed')`, [
+          org.id,
+        ]);
+        await q.query(`DELETE FROM repository_links WHERE org_id = $1`, [org.id]);
+        // Everything else the workspace owns references it and is removed with it.
+        await q.query(`DELETE FROM organizations WHERE id = $1`, [org.id]);
+      });
+      ctx.app.store.invalidate(org.id);
+      ctx.app.log.info({ orgId: org.id, userId: user.id }, "workspace deleted by its owner");
+      const next = ctx.workspaces.find((w) => w.organization.id !== org.id);
+      ctx.session.selectWorkspace(next?.organization.id ?? "");
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/me/delete",
+    auth: "authenticated",
+    sensitive: true,
+    summary:
+      "Permanently delete the signed-in account. Refused while the user is the only owner of a workspace.",
+    request: z.object({ confirm: z.string() }),
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const user = me(ctx);
+      const { confirm } = body(z.object({ confirm: z.string() }), ctx.body);
+      if (confirm.trim().toLowerCase() !== user.email.toLowerCase())
+        throw new HttpError(422, "Type your email address exactly to confirm");
+      const sole = await ctx.app.db.query<{ name: string }>(
+        `SELECT o.data->>'name' AS name FROM memberships m JOIN organizations o ON o.id = m.org_id
+         WHERE m.user_id = $1 AND m.role = 'owner' AND m.removed_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM memberships x WHERE x.org_id = m.org_id AND x.role = 'owner'
+                           AND x.removed_at IS NULL AND x.user_id <> $1)`,
+        [user.id],
+      );
+      if (sole.rows.length)
+        throw new HttpError(
+          409,
+          `You are the only owner of ${sole.rows.map((r) => r.name).join(", ")}. Transfer ownership or delete the workspace first.`,
+        );
+      await ctx.app.db.tx(async (q) => {
+        // Workspaces keep their history; the person's name and email are removed from it.
+        await q.query(
+          `UPDATE organizations SET rev = rev + 1 WHERE id IN (SELECT org_id FROM memberships WHERE user_id = $1)`,
+          [user.id],
+        );
+        await q.query(`DELETE FROM users WHERE id = $1`, [user.id]);
+      });
+      ctx.app.store.invalidate();
+      await ctx.session.end();
       return { ok: true };
     },
   },

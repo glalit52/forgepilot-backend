@@ -73,6 +73,10 @@ const EnvSchema = z.object({
   STRIPE_WEBHOOK_SECRET: opt,
   /** JSON: {"developer":{"monthly":"price_…","annual":"price_…"}, …} */
   STRIPE_PRICES: opt,
+  /** JSON: Stripe billing-meter event names per usage meter, e.g. {"agent_minutes":"fp_agent_minutes"} */
+  STRIPE_METERS: opt,
+  /** Comma-separated emails of ForgePilot staff allowed into the back-office (/admin). The email must be verified. */
+  PLATFORM_ADMIN_EMAILS: z.string().default(""),
 
   RESEND_API_KEY: opt,
   EMAIL_FROM: z.string().default("ForgePilot <no-reply@forgepilot.dev>"),
@@ -108,6 +112,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       stripePrices = JSON.parse(e.STRIPE_PRICES);
     } catch {
       problems.push("STRIPE_PRICES must be JSON");
+    }
+  }
+  let stripeMeters: Record<string, string> = {};
+  if (e.STRIPE_METERS) {
+    try {
+      stripeMeters = JSON.parse(e.STRIPE_METERS);
+    } catch {
+      problems.push("STRIPE_METERS must be JSON");
     }
   }
   if (problems.length) throw new Error(`Invalid configuration:\n  ${problems.join("\n  ")}`);
@@ -162,7 +174,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       secretKey: e.STRIPE_SECRET_KEY,
       webhookSecret: e.STRIPE_WEBHOOK_SECRET,
       prices: stripePrices,
+      meters: stripeMeters,
     },
+    platformAdmins: e.PLATFORM_ADMIN_EMAILS.split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     email: { resendApiKey: e.RESEND_API_KEY, from: e.EMAIL_FROM },
   };
 }

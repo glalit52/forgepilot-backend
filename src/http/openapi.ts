@@ -14,6 +14,7 @@ export function authLabel(auth: string): string {
   if (auth === "public") return "None";
   if (auth === "authenticated") return "Signed-in user";
   if (auth === "member") return "Any workspace member";
+  if (auth === "staff") return "ForgePilot staff";
   return `Permission \`${auth}\``;
 }
 

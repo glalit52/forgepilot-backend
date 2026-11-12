@@ -55,6 +55,8 @@ interface Cached {
 interface OrgRow {
   rev: number;
   data: Organization;
+  suspended_at: Date | null;
+  suspended_reason: string | null;
 }
 
 interface RecordRow {
@@ -87,6 +89,7 @@ export class TenantStore {
   private mutex = new KeyedMutex();
   private keys = new WeakMap<object, string>();
   private beforeCommit: BeforeCommitHook[] = [];
+  private suspended = new Map<string, string>();
 
   constructor(
     private db: Database,
@@ -108,6 +111,11 @@ export class TenantStore {
       this.bindReadEffects(cached.state);
       return cached.state;
     });
+  }
+
+  /** Reason the workspace is suspended, as of the last read or write; null when it is active. */
+  suspension(orgId: string): string | null {
+    return this.suspended.get(orgId) ?? null;
   }
 
   /** The cached snapshot without a database round-trip (may be slightly stale). */
@@ -227,10 +235,12 @@ export class TenantStore {
 
   private async orgRow(q: Queryable, orgId: string, lock: boolean): Promise<OrgRow> {
     const { rows } = await q.query<OrgRow>(
-      `SELECT rev, data FROM organizations WHERE id = $1${lock ? " FOR UPDATE" : ""}`,
+      `SELECT rev, data, suspended_at, suspended_reason FROM organizations WHERE id = $1${lock ? " FOR UPDATE" : ""}`,
       [orgId],
     );
     if (!rows[0]) throw new HttpError(404, "Workspace not found");
+    if (rows[0].suspended_at) this.suspended.set(orgId, rows[0].suspended_reason ?? "");
+    else this.suspended.delete(orgId);
     return rows[0];
   }
 

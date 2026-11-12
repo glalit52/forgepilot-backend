@@ -28,6 +28,8 @@ import type {
   TestRun,
 } from "../contract/schemas";
 import { computeHealthScore, HEALTH_SCORE_VERSION } from "../contract/domain/health";
+import { planById } from "../contract/domain/plans";
+import { HttpError } from "../platform/errors";
 import { fakeSha, newId, toIso } from "./support";
 
 type ChangedFile = Session["changedFiles"][number];
@@ -103,6 +105,29 @@ export function startSession(
   const id = `sess_${task.id.replace(/^task_/, "")}_${attempt}`;
   const { mode, sim } = fx(db);
   const simulated = mode === "simulated";
+  if (!simulated) {
+    // Real sessions cost real money and compute: the plan's concurrency limit is a hard stop.
+    const org = db.organizations[0];
+    const onTrial = !!org.trialEndsAt && Date.parse(org.trialEndsAt) > opts.now;
+    const limit = planById(onTrial ? "team" : org.plan).limits.concurrentSessions;
+    const active = db.sessions.filter(
+      (s) => s.status === "running" || s.status === "waiting",
+    ).length;
+    if (limit !== null && active >= limit)
+      throw new HttpError(
+        402,
+        `Your plan runs ${limit} agent session${limit === 1 ? "" : "s"} at a time. Wait for one to finish or upgrade.`,
+      );
+    if (agent.status !== "active") throw new HttpError(409, `${agent.name} is suspended`);
+    const perAgent = db.sessions.filter(
+      (s) => s.agentId === agent.id && s.status === "running",
+    ).length;
+    if (perAgent >= agent.maxConcurrent)
+      throw new HttpError(
+        409,
+        `${agent.name} is already running ${perAgent} session(s), its configured maximum.`,
+      );
+  }
   const needsApproval =
     simulated &&
     PROTECTED_HINT.test(`${task.title} ${task.description}`) &&

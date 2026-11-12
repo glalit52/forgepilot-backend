@@ -3,6 +3,7 @@
  * ports the domain depends on. Nothing else constructs infrastructure, which
  * keeps tests able to swap the database, clock-free seams and `fetch`.
  */
+import type Stripe from "stripe";
 import type { Config } from "./config";
 import { AdvisoryClient } from "./connectors/advisories";
 import { CredentialStore } from "./connectors/credentials";
@@ -24,6 +25,7 @@ import { RepoIntel } from "./execution/repoIntel";
 import { IdentityService } from "./identity/service";
 import { Fanout } from "./integrations/fanout";
 import { GithubEvents, GithubRepoAccess } from "./integrations/github";
+import { Maintenance } from "./integrations/maintenance";
 import { StripeEvents } from "./integrations/stripeEvents";
 import { ChangeBus } from "./platform/bus";
 import { Vault } from "./platform/crypto";
@@ -43,6 +45,8 @@ export interface AppOverrides {
   repos?: (defaults: RepoAccess) => RepoAccess;
   seed?: MockDb;
   resolveHost?: (host: string) => Promise<string[]>;
+  /** A Stripe client to use instead of one built from STRIPE_SECRET_KEY. */
+  stripe?: Stripe;
 }
 
 export interface App {
@@ -63,6 +67,7 @@ export interface App {
   credentials: CredentialStore;
   mailer: Mailer;
   plane: ExecutionPlane;
+  maintenance: Maintenance;
   enqueue(job: JobInput): Promise<void>;
   resetDemo(): Promise<void>;
   close(): Promise<void>;
@@ -95,10 +100,11 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
   const identity = new IdentityService(db, {
     sessionTtlDays: config.cookie.ttlDays,
     demoMode: config.demoMode,
+    platformAdmins: config.platformAdmins,
   });
   const github = new GithubApp(config.github, fetchImpl, db);
   const credentials = new CredentialStore(db, vault, fetchImpl);
-  const billing = new StripeBilling(config.stripe, db, config.appUrl);
+  const billing = new StripeBilling(config.stripe, db, config.appUrl, overrides.stripe);
   const mailer = new Mailer(config.email, fetchImpl, log);
   const webhooks = new OutboundWebhooks(db, vault, fetchImpl, overrides.resolveHost);
   const trackers = new IssueTrackers(fetchImpl);
@@ -233,8 +239,14 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
   worker.register("github.issues.sync", (job) => githubEvents.syncIssues(job));
   worker.register("github.webhook", (job) => githubEvents.process(job));
   worker.register("stripe.webhook", (job) => stripeEvents.process(job));
+  const maintenance = new Maintenance({ db, store, billing, log });
   worker.register(MAINTENANCE_KEY, async () => {
     await identity.purgeExpired();
+    // Once a day, in the quiet hours: retention and yesterday's metered usage.
+    if (new Date().getUTCHours() === 3) {
+      await maintenance.applyRetention();
+      await maintenance.reportUsage();
+    }
     await db.query(
       `DELETE FROM jobs WHERE status IN ('done','failed') AND finished_at < now() - interval '7 days'`,
     );
@@ -301,6 +313,7 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     credentials,
     mailer,
     plane,
+    maintenance,
     enqueue: (job) => enqueueJob(db, job),
     resetDemo: async () =>
       resetDemo(db, store, await seed(), { now: Date.now(), sim: config.execution.sim }),

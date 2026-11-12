@@ -12,6 +12,7 @@ export interface StripeConfig {
   secretKey?: string;
   webhookSecret?: string;
   prices: Record<string, { monthly?: string; annual?: string }>;
+  meters: Record<string, string>;
 }
 
 export type BillingCycle = Organization["billingCycle"];
@@ -178,6 +179,36 @@ export class StripeBilling {
     } catch {
       throw new HttpError(400, "Invalid Stripe signature");
     }
+  }
+
+  /**
+   * Sends one day's usage for one meter. The identifier makes it idempotent on
+   * Stripe's side, so a retried job can never bill the same usage twice.
+   */
+  async reportUsage(input: {
+    customerId: string;
+    meter: string;
+    day: string;
+    units: number;
+    orgId: string;
+  }): Promise<boolean> {
+    const eventName = this.cfg.meters[input.meter];
+    if (!eventName) return false;
+    await this.stripe.billing.meterEvents.create({
+      event_name: eventName,
+      identifier: `${input.orgId}:${input.meter}:${input.day}`,
+      // End of the usage day, so it lands in the right billing period.
+      timestamp: Math.floor(Date.parse(`${input.day}T23:59:59Z`) / 1000),
+      payload: {
+        stripe_customer_id: input.customerId,
+        value: String(Math.round(input.units * 100) / 100),
+      },
+    });
+    return true;
+  }
+
+  get meteredMeters(): string[] {
+    return Object.keys(this.cfg.meters);
   }
 
   async orgForCustomer(customerId: string): Promise<string | null> {

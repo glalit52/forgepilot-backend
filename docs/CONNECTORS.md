@@ -90,6 +90,14 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICES={"developer":{"monthly":"price_...","annual":"price_..."},"pro":{"monthly":"price_...","annual":"price_..."},"team":{"monthly":"price_...","annual":"price_..."},"business":{"monthly":"price_...","annual":"price_..."}}
 ```
 
+Metered usage (optional): to bill agent and browser minutes beyond a plan's allowance, create a billing meter per usage type in Stripe (Billing → Meters), attach a metered price to the plan's product, and map the meter event names:
+
+```
+STRIPE_METERS={"agent_minutes":"fp_agent_minutes","browser_minutes":"fp_browser_minutes"}
+```
+
+Each completed day of usage is then sent once per workspace, around 03:00 UTC. Without this variable usage is still tracked and shown in the app, just not sent to Stripe.
+
 To test webhooks on a laptop: `stripe listen --forward-to localhost:8080/api/v1/webhooks/stripe` and use the secret it prints.
 
 Use a restricted key in production with write access to Customers, Checkout Sessions, Subscriptions and Customer portal only.
@@ -105,7 +113,17 @@ EMAIL_FROM=ForgePilot <no-reply@yourdomain.com>
 
 Without it, emails are written to the log instead of being sent.
 
-## 7. Workspace connectors (set by each customer in the app)
+## 7. Staff back-office
+
+ForgePilot's own team (the "super admin" level, above every customer workspace) uses the `/admin` endpoints: find workspaces and users, suspend or restore a workspace, set an enterprise plan, retry failed jobs. List who is allowed:
+
+```
+PLATFORM_ADMIN_EMAILS=you@yourcompany.com,support@yourcompany.com
+```
+
+Each person signs up normally with that address and must confirm it through the verification email (or sign in with GitHub); until then the back-office answers 404 for them, like it does for everyone else. Every staff action is recorded in `GET /admin/audit`, and suspensions and plan changes also appear in the customer's own audit log.
+
+## 8. Workspace connectors (set by each customer in the app)
 
 The app sends these to `POST /integrations/:providerId/connect` as `{ "account": "...", "credentials": { ... } }`. The credential is verified against the provider first, then encrypted.
 
@@ -122,7 +140,7 @@ Agent workers also need the agent CLIs available. With `EXECUTION_SANDBOX=docker
 
 ## Order to do it in
 
-1. Database and vault key: the backend is then safe to deploy.
+1. Database, vault key and the staff list: the backend is then safe to deploy.
 2. Email: invitations and password reset work.
 3. Stripe in test mode: plans can be bought.
 4. GitHub App, then `EXECUTION_MODE=live`: real repositories.

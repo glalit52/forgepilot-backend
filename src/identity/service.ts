@@ -49,7 +49,7 @@ export class IdentityService {
 
   constructor(
     private db: Database,
-    private opts: { sessionTtlDays: number; demoMode: boolean },
+    private opts: { sessionTtlDays: number; demoMode: boolean; platformAdmins?: string[] },
   ) {}
 
   // ---------------------------------------------------------------- users
@@ -158,6 +158,22 @@ export class IdentityService {
       );
       if (linked.rows[0]) return toUser(linked.rows[0]);
       const existing = await this.findByEmail(input.email, q);
+      if (existing) {
+        // The address may have been registered by someone who never proved they own it.
+        // GitHub has verified it for this person, so the account becomes theirs: any
+        // password set before and every open session are dropped.
+        const { rows } = await q.query<{ verified: boolean }>(
+          `SELECT email_verified_at IS NOT NULL AS verified FROM users WHERE id = $1`,
+          [existing.id],
+        );
+        if (!rows[0]?.verified) {
+          await q.query(
+            `UPDATE users SET password_hash = NULL, email_verified_at = now() WHERE id = $1`,
+            [existing.id],
+          );
+          await this.destroyAllSessions(existing.id, q);
+        }
+      }
       const user =
         existing ??
         (await this.createUser(
@@ -181,6 +197,45 @@ export class IdentityService {
         githubLogin: user.githubLogin ?? input.login,
       };
     });
+  }
+
+  // ---------------------------------------------------------------- email verification & staff
+  async issueEmailVerification(userId: string, q: Queryable = this.db): Promise<string> {
+    const token = randomToken(32);
+    await q.query(
+      `INSERT INTO email_verifications (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '3 days')`,
+      [sha256(token), userId],
+    );
+    return token;
+  }
+
+  async verifyEmail(token: string): Promise<boolean> {
+    return this.db.tx(async (q) => {
+      const { rows } = await q.query<{ user_id: string }>(
+        `DELETE FROM email_verifications WHERE token_hash = $1 AND expires_at > now() RETURNING user_id`,
+        [sha256(token)],
+      );
+      if (!rows[0]) return false;
+      await q.query(
+        `UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $1`,
+        [rows[0].user_id],
+      );
+      return true;
+    });
+  }
+
+  /**
+   * ForgePilot staff: the email is on the configured list AND has been verified.
+   * Without the second condition anyone could sign up with a staff address.
+   */
+  async isStaff(userId: string): Promise<boolean> {
+    const admins = this.opts.platformAdmins ?? [];
+    if (!admins.length) return false;
+    const { rows } = await this.db.query<{ email_lower: string }>(
+      `SELECT email_lower FROM users WHERE id = $1 AND email_verified_at IS NOT NULL AND NOT is_demo`,
+      [userId],
+    );
+    return !!rows[0] && admins.includes(rows[0].email_lower);
   }
 
   // ---------------------------------------------------------------- browser sessions
@@ -363,6 +418,7 @@ export class IdentityService {
     await this.db.query(`DELETE FROM auth_sessions WHERE expires_at < now()`);
     await this.db.query(`DELETE FROM password_resets WHERE expires_at < now() - interval '1 day'`);
     await this.db.query(`DELETE FROM invitation_tokens WHERE expires_at < now()`);
+    await this.db.query(`DELETE FROM email_verifications WHERE expires_at < now()`);
   }
 }
 

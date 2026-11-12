@@ -215,6 +215,41 @@ CREATE TABLE webhook_endpoints (
 CREATE INDEX webhook_endpoints_org_idx ON webhook_endpoints (org_id);
 `,
   },
+  {
+    id: "0002_staff_suspension_usage",
+    sql: `
+ALTER TABLE organizations ADD COLUMN suspended_at timestamptz;
+ALTER TABLE organizations ADD COLUMN suspended_reason text;
+
+CREATE TABLE email_verifications (
+  token_hash text PRIMARY KEY,
+  user_id    text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL
+);
+
+-- Everything ForgePilot staff do through the back-office, kept apart from customer audit logs.
+CREATE TABLE staff_audit (
+  id      bigserial PRIMARY KEY,
+  user_id text NOT NULL,
+  action  text NOT NULL,
+  target  text NOT NULL,
+  detail  text NOT NULL DEFAULT '',
+  ip      text,
+  at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX staff_audit_at_idx ON staff_audit (at);
+
+-- Metered usage already sent to the billing provider, one row per workspace, meter and day.
+CREATE TABLE usage_reports (
+  org_id      text NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  meter       text NOT NULL,
+  day         date NOT NULL,
+  units       double precision NOT NULL,
+  reported_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, meter, day)
+);
+`,
+  },
 ];
 
 export async function migrate(db: Database): Promise<string[]> {

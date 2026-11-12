@@ -566,4 +566,25 @@ describe("live mode", () => {
     expect(errored.run.billedBrowserMinutes).toBe(0);
     expect(errored.bugs).toEqual([]);
   });
+
+  it("stops launches at the plan's concurrent-session limit", async () => {
+    // End the trial: the Free plan runs one agent session at a time.
+    const orgId = (await owner.get("/session")).body.workspace.id;
+    await h.app.store.write(orgId, (db) => void (db.organizations[0].trialEndsAt = null));
+    const first = await owner.post("/tasks", newTask("Add feature file again"));
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    const second = await owner.post("/tasks", newTask("Add another feature"));
+    expect(second.status).toBe(402);
+    expect(second.body.error).toMatch(/1 agent session at a time/);
+    // Refused launches leave nothing behind.
+    expect((await owner.get("/tasks?q=another")).body).toEqual([]);
+    // The slot frees up when the session ends (the earlier test left no enabled suite, so it stays in verification).
+    await waitFor(h, task(first.body.id, "verifying"), 30_000);
+    expect((await owner.post("/tasks", newTask("Add another feature"))).status).toBe(200);
+    await waitFor(
+      h,
+      async () => (await owner.get("/sessions?status=running")).body.length === 0,
+      30_000,
+    );
+  });
 });

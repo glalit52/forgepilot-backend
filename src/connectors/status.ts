@@ -72,6 +72,17 @@ export function connectorStatus(config: Config): ConnectorStatus[] {
       STRIPE_WEBHOOK_SECRET: stripe.webhookSecret,
       STRIPE_PRICES: stripe.prices,
     }),
+    check("staff", "Back-office staff list", "Nobody can open the staff back-office (/admin).", {
+      PLATFORM_ADMIN_EMAILS: config.platformAdmins,
+    }),
+    check(
+      "usage_meters",
+      "Stripe usage meters",
+      "Metered usage is tracked but not sent to Stripe.",
+      {
+        STRIPE_METERS: stripe.meters,
+      },
+    ),
     check("email", "Email (Resend)", "Emails are logged instead of sent.", {
       RESEND_API_KEY: email.resendApiKey,
     }),

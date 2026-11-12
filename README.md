@@ -71,6 +71,14 @@ src/
 - Customer webhook URLs and connector URLs are restricted to public HTTPS hosts (SSRF guard, re-checked at delivery).
 - Logs, diffs and errors are redacted; a change containing a credential that was given to the session is not pushed.
 
+### Three levels of access
+
+- **Workspace (tenant):** one customer's isolated space. Every workspace route only ever sees its own data.
+- **Roles inside a workspace:** owner, admin, member, viewer.
+- **Staff (super admin):** ForgePilot's own team, listed in `PLATFORM_ADMIN_EMAILS`, using `/admin/*`. They can find, suspend, restore and re-plan workspaces and retry jobs; they cannot read a customer's code, logs or credentials there. Every staff action is audited, and the customer sees suspensions and plan changes in their own audit log.
+
+Also enforced: suspended workspaces are read-only; in live mode a plan's concurrent-session limit is a hard stop; each workspace's retention policy is applied daily; owners can delete their workspace and people their account.
+
 ### API additions beyond the web app's contract
 
 Real sign-in (`/auth/login`, `/auth/logout`, `/auth/github/start`, `/auth/password/*`), `/me`, invitation acceptance, customer webhooks (`/webhook-endpoints`), the Stripe portal (`/billing/portal`), Linear/Jira import (`/integrations/:providerId/issues`), `/events` (SSE), `/webhooks/github`, `/webhooks/stripe`, `/openapi.json`, plus `/healthz`, `/readyz` and `/metrics`. Errors keep the `{ error, details }` shape and add `code` and `requestId`. POSTs accept an `Idempotency-Key`.
@@ -85,7 +93,8 @@ Stated plainly so nobody is surprised later:
 - **The egress allowlist is not enforced** in the sandbox (network is on or off); that needs a proxy.
 - **Demo mode has passwordless persona sign-in** and must never run with customer data. In production it refuses to start with a real database unless explicitly allowed.
 - **The web app side is in [forgepilot-frontend#2](https://github.com/glalit52/forgepilot-frontend/pull/2)**: password sign-up, real sign-in and sign-out, and GitHub App installation. GitHub sign-in and the install redirect still need real GitHub credentials to be tried.
-- Not built yet: metered usage reporting to Stripe, artifact storage (S3) for screenshots and traces, OpenTelemetry tracing, SSO/SCIM.
+- **The web app has no screens yet for** the email links this backend sends (`/verify-email`, `/reset-password`), for the staff back-office, or for deleting a workspace or account. The endpoints exist and are tested.
+- Not built yet: artifact storage (S3) for screenshots and traces, OpenTelemetry tracing, SSO/SCIM.
 
 ## Configuration
 
