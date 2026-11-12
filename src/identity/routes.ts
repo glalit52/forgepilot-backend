@@ -537,6 +537,14 @@ export const identityRoutes: GlobalRouteDef[] = [
         await q.query(`DELETE FROM organizations WHERE id = $1`, [org.id]);
       });
       ctx.app.store.invalidate(org.id);
+      await ctx.app.artifacts
+        .removePrefix(`${org.id}/`)
+        .catch((err) =>
+          ctx.app.log.error(
+            { err, orgId: org.id },
+            "could not remove the deleted workspace's artifacts",
+          ),
+        );
       ctx.app.log.info({ orgId: org.id, userId: user.id }, "workspace deleted by its owner");
       const next = ctx.workspaces.find((w) => w.organization.id !== org.id);
       ctx.session.selectWorkspace(next?.organization.id ?? "");

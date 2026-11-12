@@ -551,6 +551,13 @@ describe("live mode", () => {
       retries: 1,
     });
     expect(failed.results[0].error).toContain("expected 200, got 500");
+    // The full output is kept as an evidence file, readable only inside this workspace.
+    const ref = failed.results[0].evidence[0].ref as string;
+    const file = await owner.get(`/test-runs/${run.body.id}/artifacts/${ref.split("/").pop()}`);
+    expect(file.status, JSON.stringify(file.body)).toBe(200);
+    expect(file.body.content).toContain("AssertionError: expected 200, got 500");
+    expect((await owner.get(`/test-runs/${run.body.id}/artifacts/..%2Fsecret`)).status).toBe(404);
+    expect((await owner.get(`/test-runs/run_other/artifacts/x.log`)).status).toBe(404);
 
     await owner.post(`/test-suites/${suite.id}`, { enabled: false });
     const empty = await owner.post("/test-runs", { repositoryId: repoId, branch: "main" });

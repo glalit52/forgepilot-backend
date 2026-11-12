@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { createApp, type App, type AppOverrides } from "../src/app";
 import { loadConfig } from "../src/config";
@@ -97,6 +99,7 @@ export async function createHarness(
     FP_SIM_VERIFY_MS: "30",
     FP_SIM_SCAN_MS: "20",
     FP_SIM_INDEX_MS: "10",
+    ARTIFACT_DIR: join(tmpdir(), `fp-artifacts-${randomId(8)}`),
     ...env,
   });
   // With TEST_DATABASE_URL (a real Postgres), every harness gets its own throwaway database.

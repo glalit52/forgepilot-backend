@@ -522,3 +522,21 @@ describe("one-time codes", () => {
     expect(verifyTotp(secret, "08180", now)).toBeNull();
   });
 });
+
+describe("artifact storage", () => {
+  it("stores, reads and removes files, and refuses keys that escape the store", async () => {
+    const { LocalArtifactStore, assertSafeKey } = await import("../src/platform/artifactStore");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const store = new LocalArtifactStore(mkdtempSync(join(tmpdir(), "fp-store-")));
+    await store.put("ws_1/runs/run_1/out.log", "hello", "text/plain");
+    expect((await store.get("ws_1/runs/run_1/out.log"))!.body.toString()).toBe("hello");
+    expect((await store.get("ws_1/runs/run_1/out.log"))!.contentType).toBe("text/plain");
+    expect(await store.get("ws_1/runs/run_1/missing.log")).toBeNull();
+    await store.removePrefix("ws_1/");
+    expect(await store.get("ws_1/runs/run_1/out.log")).toBeNull();
+    for (const bad of ["../etc/passwd", "ws_1/../ws_2/x", "/abs/path", "ws_1//x", ""])
+      expect(() => assertSafeKey(bad), bad).toThrow();
+  });
+});

@@ -27,6 +27,7 @@ import {
   type TestCaseOutcome,
 } from "../domain/loop";
 import { redactSecrets } from "../platform/crypto";
+import type { ArtifactStore } from "../platform/artifactStore";
 import type { Database } from "../platform/db";
 import { toIso } from "../platform/ids";
 import type { Job } from "../platform/jobs";
@@ -133,6 +134,7 @@ export class ExecutionPlane {
       repos: RepoAccess;
       credentials: CredentialStore;
       log: Logger;
+      artifacts: ArtifactStore;
     },
   ) {}
 
@@ -570,6 +572,17 @@ export class ExecutionPlane {
         }
         if (suite.type === "playwright") browserMs += res.durationMs;
         const flaky = res.code === -1;
+        // Keep the suite's full output as evidence; the result only carries its tail.
+        if (res.code !== 0)
+          await this.deps.artifacts
+            .put(
+              `${orgId}/runs/${run.id}/${suite.id}.log`,
+              redactSecrets(res.output).text,
+              "text/plain; charset=utf-8",
+            )
+            .catch((err) =>
+              this.deps.log.warn({ err, orgId, runId }, "could not store test output"),
+            );
         const junit = await readJUnit(dir);
         const error = flaky || res.code === 0 ? null : tail(res.output, 4000);
         if (junit.length && !flaky)

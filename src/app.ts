@@ -27,6 +27,7 @@ import { Fanout } from "./integrations/fanout";
 import { GithubEvents, GithubRepoAccess } from "./integrations/github";
 import { Maintenance } from "./integrations/maintenance";
 import { StripeEvents } from "./integrations/stripeEvents";
+import { LocalArtifactStore, S3ArtifactStore, type ArtifactStore } from "./platform/artifactStore";
 import { ChangeBus } from "./platform/bus";
 import { Vault } from "./platform/crypto";
 import { openDatabase, type Database } from "./platform/db";
@@ -45,6 +46,7 @@ export interface AppOverrides {
   repos?: (defaults: RepoAccess) => RepoAccess;
   seed?: MockDb;
   resolveHost?: (host: string) => Promise<string[]>;
+  artifacts?: ArtifactStore;
   /** A Stripe client to use instead of one built from STRIPE_SECRET_KEY. */
   stripe?: Stripe;
 }
@@ -68,6 +70,7 @@ export interface App {
   mailer: Mailer;
   plane: ExecutionPlane;
   maintenance: Maintenance;
+  artifacts: ArtifactStore;
   enqueue(job: JobInput): Promise<void>;
   resetDemo(): Promise<void>;
   close(): Promise<void>;
@@ -114,7 +117,12 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     new RepoIntel(github, new AdvisoryClient(fetchImpl)),
   );
   const repos = overrides.repos ? overrides.repos(githubRepos) : githubRepos;
-  const plane = new ExecutionPlane({ config, db, store, repos, credentials, log });
+  const artifacts: ArtifactStore =
+    overrides.artifacts ??
+    (config.artifacts.driver === "s3"
+      ? new S3ArtifactStore(config.artifacts.s3)
+      : new LocalArtifactStore(config.artifacts.dir));
+  const plane = new ExecutionPlane({ config, db, store, repos, credentials, log, artifacts });
   const githubLive = github.configured;
 
   const ports: DomainPorts = {
@@ -125,6 +133,12 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     executionLive: config.execution.mode === "live",
     personas: () => identity.personas(),
     runs: { workerLog: (orgId, runId) => plane.runLog(orgId, runId) },
+    artifacts: {
+      read: async (orgId, runId, name) => {
+        const file = await artifacts.get(`${orgId}/runs/${runId}/${name}`);
+        return file ? { contentType: file.contentType, content: file.body.toString("utf8") } : null;
+      },
+    },
     webhooks: {
       list: (orgId) => webhooks.list(orgId),
       create: (orgId, userId, input) => webhooks.create(orgId, userId, input),
@@ -240,7 +254,7 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
   worker.register("github.issues.sync", (job) => githubEvents.syncIssues(job));
   worker.register("github.webhook", (job) => githubEvents.process(job));
   worker.register("stripe.webhook", (job) => stripeEvents.process(job));
-  const maintenance = new Maintenance({ db, store, billing, log });
+  const maintenance = new Maintenance({ db, store, billing, log, artifacts });
   worker.register(MAINTENANCE_KEY, async () => {
     await identity.purgeExpired();
     // Once a day, in the quiet hours: retention and yesterday's metered usage.
@@ -315,6 +329,7 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     mailer,
     plane,
     maintenance,
+    artifacts,
     enqueue: (job) => enqueueJob(db, job),
     resetDemo: async () =>
       resetDemo(db, store, await seed(), { now: Date.now(), sim: config.execution.sim }),

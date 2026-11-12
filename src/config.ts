@@ -78,6 +78,14 @@ const EnvSchema = z.object({
   /** Comma-separated emails of ForgePilot staff allowed into the back-office (/admin). The email must be verified. */
   PLATFORM_ADMIN_EMAILS: z.string().default(""),
 
+  /** Where execution artifacts (test output, later screenshots and traces) are kept. */
+  ARTIFACT_STORE: z.enum(["local", "s3"]).default("local"),
+  ARTIFACT_DIR: z.string().default(".data/artifacts"),
+  S3_BUCKET: opt,
+  S3_REGION: z.string().default("us-east-1"),
+  /** For S3-compatible services such as Cloudflare R2 or MinIO. */
+  S3_ENDPOINT: opt,
+
   RESEND_API_KEY: opt,
   EMAIL_FROM: z.string().default("ForgePilot <no-reply@forgepilot.dev>"),
 });
@@ -114,6 +122,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       problems.push("STRIPE_PRICES must be JSON");
     }
   }
+  if (e.ARTIFACT_STORE === "s3" && !e.S3_BUCKET) problems.push("ARTIFACT_STORE=s3 needs S3_BUCKET");
   let stripeMeters: Record<string, string> = {};
   if (e.STRIPE_METERS) {
     try {
@@ -179,6 +188,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     platformAdmins: e.PLATFORM_ADMIN_EMAILS.split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
+    artifacts: {
+      driver: e.ARTIFACT_STORE,
+      dir: e.ARTIFACT_DIR,
+      s3: { bucket: e.S3_BUCKET ?? "", region: e.S3_REGION, endpoint: e.S3_ENDPOINT },
+    },
     email: { resendApiKey: e.RESEND_API_KEY, from: e.EMAIL_FROM },
   };
 }

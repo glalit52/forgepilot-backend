@@ -30,6 +30,14 @@ export interface DomainPorts {
   readonly appUrl: string;
   /** True when agents, test runs and scans execute for real instead of being simulated. */
   readonly executionLive: boolean;
+  artifacts: {
+    /** A stored execution file of a test run (e.g. a suite's full output), or null when it doesn't exist. */
+    read(
+      orgId: string,
+      runId: string,
+      name: string,
+    ): Promise<{ contentType: string; content: string } | null>;
+  };
   runs: { workerLog(orgId: string, runId: string): Promise<LogLine[] | null> };
   webhooks: {
     list(
