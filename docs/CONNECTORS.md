@@ -113,7 +113,23 @@ EMAIL_FROM=ForgePilot <no-reply@yourdomain.com>
 
 Without it, emails are written to the log instead of being sent.
 
-## 7. Staff back-office
+## 7. File storage for test evidence
+
+Full test output (and later screenshots and traces) is kept as files. By default they go to a folder on the server's disk, which is fine for one machine. For production use a bucket on AWS S3 or any S3-compatible service (Cloudflare R2, MinIO):
+
+```
+ARTIFACT_STORE=s3
+S3_BUCKET=forgepilot-artifacts
+S3_REGION=us-east-1
+# Only for S3-compatible services:
+S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+```
+
+Keep the bucket private. Files are stored under one folder per workspace and are removed by each workspace's retention setting and when a workspace is deleted.
+
+## 8. Staff back-office
 
 ForgePilot's own team (the "super admin" level, above every customer workspace) uses the `/admin` endpoints: find workspaces and users, suspend or restore a workspace, set an enterprise plan, retry failed jobs. List who is allowed:
 
@@ -121,9 +137,21 @@ ForgePilot's own team (the "super admin" level, above every customer workspace) 
 PLATFORM_ADMIN_EMAILS=you@yourcompany.com,support@yourcompany.com
 ```
 
-Each person signs up normally with that address and must confirm it through the verification email (or sign in with GitHub); until then the back-office answers 404 for them, like it does for everyone else. Every staff action is recorded in `GET /admin/audit`, and suspensions and plan changes also appear in the customer's own audit log.
+Each person signs up normally with that address, confirms it through the verification email, and turns on two-factor sign-in with an authenticator app (the back-office walks them through it). Until all three are done the back-office answers 404 for them, like it does for everyone else. Every staff action is recorded in `GET /admin/audit`, and suspensions and plan changes also appear in the customer's own audit log.
 
-## 8. Workspace connectors (set by each customer in the app)
+## 9. Single sign-on for enterprise customers
+
+Nothing to configure on the platform. A customer on the Enterprise plan connects Okta or Microsoft Entra ID in Integrations with four values from an OpenID Connect app they create in their identity provider (redirect URL: `https://api.example.com/api/v1/auth/sso/callback`):
+
+| `credentials` field        | Meaning                                                    |
+| -------------------------- | ---------------------------------------------------------- |
+| `issuer`                   | The provider's issuer URL, e.g. `https://company.okta.com` |
+| `clientId`, `clientSecret` | From the OpenID Connect app                                |
+| `domain`                   | Their email domain, e.g. `company.com`                     |
+
+The claim then appears in the staff back-office under single sign-on domains. **Approve it only after confirming the customer really controls that domain**, because approval lets their identity provider sign people in for every address in it. Changing the settings needs a fresh approval.
+
+## 10. Workspace connectors (set by each customer in the app)
 
 The app sends these to `POST /integrations/:providerId/connect` as `{ "account": "...", "credentials": { ... } }`. The credential is verified against the provider first, then encrypted.
 

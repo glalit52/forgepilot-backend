@@ -23,6 +23,7 @@ import { routes as contractRoutes } from "./domain/routes";
 import { ExecutionPlane, type RepoAccess } from "./execution/plane";
 import { RepoIntel } from "./execution/repoIntel";
 import { IdentityService } from "./identity/service";
+import { SsoService, SSO_PROVIDERS } from "./identity/sso";
 import { Fanout } from "./integrations/fanout";
 import { GithubEvents, GithubRepoAccess } from "./integrations/github";
 import { Maintenance } from "./integrations/maintenance";
@@ -71,6 +72,7 @@ export interface App {
   plane: ExecutionPlane;
   maintenance: Maintenance;
   artifacts: ArtifactStore;
+  sso: SsoService;
   enqueue(job: JobInput): Promise<void>;
   resetDemo(): Promise<void>;
   close(): Promise<void>;
@@ -122,6 +124,15 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     (config.artifacts.driver === "s3"
       ? new S3ArtifactStore(config.artifacts.s3)
       : new LocalArtifactStore(config.artifacts.dir));
+  const sso = new SsoService({
+    db,
+    store,
+    identity,
+    credentials,
+    fetchImpl,
+    resolveHost: overrides.resolveHost,
+    callbackUrl: `${config.publicApiUrl}/auth/sso/callback`,
+  });
   const plane = new ExecutionPlane({ config, db, store, repos, credentials, log, artifacts });
   const githubLive = github.configured;
 
@@ -133,6 +144,10 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     executionLive: config.execution.mode === "live",
     personas: () => identity.personas(),
     runs: { workerLog: (orgId, runId) => plane.runLog(orgId, runId) },
+    sso: {
+      claimDomain: (q, input) => sso.claimDomain(q, input),
+      removeDomains: (q, orgId) => sso.removeDomains(q, orgId),
+    },
     artifacts: {
       read: async (orgId, runId, name) => {
         const file = await artifacts.get(`${orgId}/runs/${runId}/${name}`);
@@ -184,7 +199,10 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     credentials: {
       put: (q, orgId, providerId, secret) => credentials.put(q, orgId, providerId, secret),
       remove: (q, orgId, providerId) => credentials.remove(q, orgId, providerId),
-      verify: (providerId, secret) => credentials.verify(providerId, secret),
+      verify: (providerId, secret) =>
+        SSO_PROVIDERS.includes(providerId)
+          ? sso.verifyConfig(secret)
+          : credentials.verify(providerId, secret),
     },
     apiKeys: {
       register: (q, input) => identity.registerApiKey(q, input),
@@ -330,6 +348,7 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     plane,
     maintenance,
     artifacts,
+    sso,
     enqueue: (job) => enqueueJob(db, job),
     resetDemo: async () =>
       resetDemo(db, store, await seed(), { now: Date.now(), sim: config.execution.sim }),

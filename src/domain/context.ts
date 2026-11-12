@@ -30,6 +30,14 @@ export interface DomainPorts {
   readonly appUrl: string;
   /** True when agents, test runs and scans execute for real instead of being simulated. */
   readonly executionLive: boolean;
+  sso: {
+    /** Records a workspace's claim on its email domain for single sign-on (inactive until staff approve). */
+    claimDomain(
+      q: Queryable,
+      input: { orgId: string; providerId: string; domain: string; requester: User },
+    ): Promise<void>;
+    removeDomains(q: Queryable, orgId: string): Promise<void>;
+  };
   artifacts: {
     /** A stored execution file of a test run (e.g. a suite's full output), or null when it doesn't exist. */
     read(

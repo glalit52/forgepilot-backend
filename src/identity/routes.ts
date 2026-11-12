@@ -305,6 +305,10 @@ export const identityRoutes: GlobalRouteDef[] = [
         ? `${ctx.app.config.publicApiUrl}/auth/github/start`
         : null,
       githubAppInstallUrl: ctx.app.github.configured ? ctx.app.github.installUrl : null,
+      // Workspaces on the Enterprise plan can sign in through their own identity provider.
+      ssoSignInUrl: ctx.app.config.demoMode
+        ? null
+        : `${ctx.app.config.publicApiUrl}/auth/sso/start`,
     }),
   },
   {

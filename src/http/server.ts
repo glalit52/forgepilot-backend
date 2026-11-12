@@ -406,6 +406,51 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
         }
       });
 
+      // ------------------------------------------------------------ single sign-on (OpenID Connect)
+      const SSO_COOKIE = "fp_sso";
+      api.get("/auth/sso/start", async (req, reply) => {
+        req.routeLabel = "/auth/sso/start";
+        rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
+        const email = String((req.query as { email?: string }).email ?? "");
+        const started = await app.sso.start(email).catch((err) => {
+          req.log.warn({ err }, "sso start failed");
+          return null;
+        });
+        if (!started) return reply.redirect(`${config.appUrl}/login?error=sso_unavailable`);
+        // The flow state stays in this browser only; the callback must present the same values.
+        reply.setCookie(SSO_COOKIE, JSON.stringify(started.flow), {
+          ...cookieOpts(600),
+          httpOnly: true,
+        });
+        return reply.redirect(started.url);
+      });
+      api.get("/auth/sso/callback", async (req, reply) => {
+        req.routeLabel = "/auth/sso/callback";
+        rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
+        const q = req.query as { code?: string; state?: string };
+        const raw = req.cookies[SSO_COOKIE];
+        reply.clearCookie(SSO_COOKIE, cookieOpts());
+        try {
+          const flow = JSON.parse(raw ?? "null") as import("../identity/sso").SsoFlowState | null;
+          if (!flow || !q.code || !q.state || !safeEqual(q.state, String(flow.state)))
+            throw new HttpError(401, "Sign-in state mismatch", undefined, "sso_failed");
+          const { user, orgId } = await app.sso.finish(flow, q.code);
+          setSessionCookie(
+            reply,
+            await app.identity.createSession(user.id, {
+              ip: req.ip,
+              userAgent: req.headers["user-agent"] ?? null,
+            }),
+          );
+          setWorkspaceCookie(reply, orgId);
+          return reply.redirect(`${config.appUrl}/app`);
+        } catch (err) {
+          const code = err instanceof HttpError ? err.code : "sso_failed";
+          if (!(err instanceof HttpError)) req.log.warn({ err }, "sso callback failed");
+          return reply.redirect(`${config.appUrl}/login?error=${encodeURIComponent(code)}`);
+        }
+      });
+
       // ------------------------------------------------------------ inbound webhooks
       api.post("/webhooks/github", async (req, reply) => {
         req.routeLabel = "/webhooks/github";

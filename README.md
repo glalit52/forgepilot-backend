@@ -77,6 +77,8 @@ src/
 - **Roles inside a workspace:** owner, admin, member, viewer.
 - **Staff (super admin):** ForgePilot's own team, listed in `PLATFORM_ADMIN_EMAILS`, using `/admin/*`. They can find, suspend, restore and re-plan workspaces and retry jobs; they cannot read a customer's code, logs or credentials there. Every staff action is audited, and the customer sees suspensions and plan changes in their own audit log.
 
+Staff must also have two-factor sign-in (an authenticator app) turned on. Enterprise workspaces can sign in through their own identity provider (Okta, Microsoft Entra ID) once staff have approved their email domain.
+
 Also enforced: suspended workspaces are read-only; in live mode a plan's concurrent-session limit is a hard stop; each workspace's retention policy is applied daily; owners can delete their workspace and people their account.
 
 ### API additions beyond the web app's contract
@@ -94,7 +96,7 @@ Stated plainly so nobody is surprised later:
 - **Demo mode has passwordless persona sign-in** and must never run with customer data. In production it refuses to start with a real database unless explicitly allowed.
 - **The web app side is in [forgepilot-frontend#2](https://github.com/glalit52/forgepilot-frontend/pull/2)**: password sign-up, real sign-in and sign-out, and GitHub App installation. GitHub sign-in and the install redirect still need real GitHub credentials to be tried.
 - **The web app has no screens yet for** the email links this backend sends (`/verify-email`, `/reset-password`), for the staff back-office, or for deleting a workspace or account. The endpoints exist and are tested.
-- Not built yet: artifact storage (S3) for screenshots and traces, OpenTelemetry tracing, SSO/SCIM.
+- Not built yet: screenshots and traces from browser tests (the file storage for them exists), OpenTelemetry tracing, SCIM user provisioning. Single sign-on uses OpenID Connect, not SAML.
 
 ## Configuration
 
