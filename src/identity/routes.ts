@@ -24,8 +24,12 @@ export interface GlobalCtx {
   now: number;
   ip: string | null;
   userAgent: string | null;
+  /** True when the session exists but still owes its two-factor code. */
+  twoFactorPending: boolean;
   session: {
     token: string | undefined;
+    /** Hash of the current session token; null when the request has no session. */
+    tokenHash: string | null;
     /** Starts a browser session for the user and selects a workspace ("" = none yet). */
     start(userId: string, orgId: string): Promise<void>;
     selectWorkspace(orgId: string): void;
@@ -45,6 +49,8 @@ export interface GlobalRouteDef {
   contract?: boolean;
   /** Stricter rate limit for credential-guessing surfaces. */
   sensitive?: boolean;
+  /** Reachable by a session that still owes its two-factor code (the routes needed to provide it). */
+  allowPendingTwoFactor?: boolean;
 }
 
 function body<T>(schema: z.ZodType<T>, b: unknown): T {
@@ -84,7 +90,10 @@ const SignUpSchema = S.SignUpInputSchema.extend({
   invitationToken: z.string().optional(),
 });
 const LoginSchema = S.LoginInputSchema;
-const AuthResultSchema = S.AuthResultSchema;
+const AuthResultSchema = S.AuthResultSchema.extend({ twoFactorRequired: z.boolean().optional() });
+const CodeSchema = z.object({
+  code: z.string().regex(/^\s*\d{3}\s?\d{3}\s*$/, "Enter the 6-digit code"),
+});
 const PersonaSchema = S.UserSchema.extend({
   workspaces: z.array(z.object({ orgId: z.string(), name: z.string(), role: S.RoleSchema })),
 });
@@ -313,13 +322,92 @@ export const identityRoutes: GlobalRouteDef[] = [
       if (!user) throw new HttpError(401, "Wrong email or password");
       const workspaces = await ctx.app.identity.membershipsOf(user.id);
       await ctx.session.start(user.id, workspaces[0]?.organization.id ?? "");
-      return { user, hasWorkspace: workspaces.length > 0 };
+      const { enabled } = await ctx.app.identity.twoFactorStatus(user.id);
+      // With two-factor on, the new session can do nothing until /auth/2fa/verify succeeds.
+      return { user, hasWorkspace: workspaces.length > 0, twoFactorRequired: enabled };
+    },
+  },
+  {
+    method: "GET",
+    path: "/auth/2fa/status",
+    auth: "authenticated",
+    allowPendingTwoFactor: true,
+    summary:
+      "Whether two-factor sign-in is on for the account and whether this session has passed it.",
+    response: z.object({ enabled: z.boolean(), verified: z.boolean(), staffEligible: z.boolean() }),
+    handler: async (ctx) => {
+      const status = await ctx.app.identity.twoFactorStatus(me(ctx).id);
+      return { ...status, verified: status.enabled && !ctx.twoFactorPending };
+    },
+  },
+  {
+    method: "POST",
+    path: "/auth/2fa/setup",
+    auth: "authenticated",
+    sensitive: true,
+    summary:
+      "Start two-factor enrolment: returns the secret to add to an authenticator app. Not active until confirmed.",
+    response: z.object({ secret: z.string(), otpauthUrl: z.string() }),
+    handler: (ctx) => ctx.app.identity.beginTwoFactor(me(ctx)),
+  },
+  {
+    method: "POST",
+    path: "/auth/2fa/enable",
+    auth: "authenticated",
+    sensitive: true,
+    summary:
+      "Confirm enrolment with a code from the authenticator app. Signs out the account's other sessions.",
+    request: CodeSchema,
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const { code } = body(CodeSchema, ctx.body);
+      if (!(await ctx.app.identity.enableTwoFactor(me(ctx).id, ctx.session.tokenHash!, code)))
+        throw new HttpError(
+          400,
+          "That code is not valid. Check the time on your phone and try the next code.",
+        );
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/auth/2fa/verify",
+    auth: "authenticated",
+    sensitive: true,
+    allowPendingTwoFactor: true,
+    summary: "Provide the two-factor code for the current session after signing in.",
+    request: CodeSchema,
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const { code } = body(CodeSchema, ctx.body);
+      if (!(await ctx.app.identity.passTwoFactor(me(ctx).id, ctx.session.tokenHash!, code)))
+        throw new HttpError(
+          400,
+          "That code is not valid or was already used. Wait for the next code.",
+        );
+      return { ok: true };
+    },
+  },
+  {
+    method: "POST",
+    path: "/auth/2fa/disable",
+    auth: "authenticated",
+    sensitive: true,
+    summary: "Turn two-factor sign-in off. Needs a current code.",
+    request: CodeSchema,
+    response: S.OkSchema,
+    handler: async (ctx) => {
+      const { code } = body(CodeSchema, ctx.body);
+      if (!(await ctx.app.identity.disableTwoFactor(me(ctx).id, code)))
+        throw new HttpError(400, "That code is not valid.");
+      return { ok: true };
     },
   },
   {
     method: "POST",
     path: "/auth/logout",
     auth: "public",
+    allowPendingTwoFactor: true,
     summary: "End the current session and clear the cookies.",
     response: S.OkSchema,
     handler: async (ctx) => {

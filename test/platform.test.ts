@@ -506,3 +506,19 @@ describe("parsers", () => {
     expect(slow.durationMs).toBeLessThan(5000);
   });
 });
+
+describe("one-time codes", () => {
+  it("matches the RFC 6238 reference values and tolerates one step of clock drift", async () => {
+    const { base32Encode, totpCode, verifyTotp } = await import("../src/platform/totp");
+    // RFC 6238 appendix B, SHA-1, secret "12345678901234567890" (8-digit values truncated to 6).
+    const secret = base32Encode(Buffer.from("12345678901234567890"));
+    expect(totpCode(secret, Math.floor(59 / 30))).toBe("287082");
+    expect(totpCode(secret, Math.floor(1111111109 / 30))).toBe("081804");
+    expect(totpCode(secret, Math.floor(20000000000 / 30))).toBe("353130");
+    const now = 1111111109_000;
+    expect(verifyTotp(secret, "081804", now)).toBe(Math.floor(1111111109 / 30));
+    expect(verifyTotp(secret, "081804", now + 30_000)).not.toBeNull();
+    expect(verifyTotp(secret, "081804", now + 90_000)).toBeNull();
+    expect(verifyTotp(secret, "08180", now)).toBeNull();
+  });
+});

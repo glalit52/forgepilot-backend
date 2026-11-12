@@ -250,6 +250,28 @@ CREATE TABLE usage_reports (
 );
 `,
   },
+  {
+    id: "0003_two_factor_sso",
+    sql: `
+ALTER TABLE users ADD COLUMN totp_secret_ct text;
+ALTER TABLE users ADD COLUMN totp_enabled_at timestamptz;
+ALTER TABLE users ADD COLUMN totp_last_counter bigint;
+ALTER TABLE auth_sessions ADD COLUMN two_factor_at timestamptz;
+
+-- Email domains a workspace wants to sign in through its own identity provider.
+-- A claim only takes effect once ForgePilot staff have approved it.
+CREATE TABLE sso_domains (
+  domain       text PRIMARY KEY,
+  org_id       text NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  provider_id  text NOT NULL,
+  status       text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  requested_by text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  decided_at   timestamptz
+);
+CREATE INDEX sso_domains_org_idx ON sso_domains (org_id);
+`,
+  },
 ];
 
 export async function migrate(db: Database): Promise<string[]> {

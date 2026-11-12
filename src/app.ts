@@ -101,6 +101,7 @@ export async function createApp(config: Config, overrides: AppOverrides = {}): P
     sessionTtlDays: config.cookie.ttlDays,
     demoMode: config.demoMode,
     platformAdmins: config.platformAdmins,
+    vault,
   });
   const github = new GithubApp(config.github, fetchImpl, db);
   const credentials = new CredentialStore(db, vault, fetchImpl);

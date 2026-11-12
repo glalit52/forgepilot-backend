@@ -36,6 +36,9 @@ interface Caller {
   /** Set when the request authenticated with an API key: pinned to one workspace and role. */
   apiKey?: { orgId: string; role: WorkspaceMembership["role"]; keyId: string };
   sessionToken?: string;
+  tokenHash?: string;
+  /** Signed in with a password but the two-factor code is still owed: may only reach the routes that collect it. */
+  twoFactorPending?: boolean;
 }
 
 declare module "fastify" {
@@ -187,6 +190,8 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
       user: session.user,
       workspaces: await app.identity.membershipsOf(session.user.id),
       sessionToken: token,
+      tokenHash: session.tokenHash,
+      twoFactorPending: session.twoFactorPending,
     };
   }
 
@@ -311,7 +316,7 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
       api.get("/events", async (req, reply) => {
         req.routeLabel = "/events";
         const caller = await authenticate(req);
-        if (!caller) throw new HttpError(401, "Not signed in");
+        if (!caller || caller.twoFactorPending) throw new HttpError(401, "Not signed in");
         const orgId = activeMembership(req, caller)?.organization.id;
         if (!orgId) throw new HttpError(403, "No workspace — finish onboarding first");
         await app.store.read(orgId);
@@ -454,7 +459,21 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
             req.routeLabel = route.path;
             if (route.sensitive) rateLimit(req, reply, "auth", config.rateLimit.authPerMinute);
             assertSameSite(req);
-            const caller = await authenticate(req);
+            const signedIn = await authenticate(req);
+            if (
+              signedIn?.twoFactorPending &&
+              route.auth !== "public" &&
+              !route.allowPendingTwoFactor
+            )
+              throw new HttpError(
+                401,
+                "Enter your two-factor code to continue",
+                undefined,
+                "two_factor_required",
+              );
+            // To every other route a half-finished sign-in is the same as no sign-in.
+            const caller =
+              signedIn?.twoFactorPending && !route.allowPendingTwoFactor ? null : signedIn;
             if (route.auth !== "public" && !caller) throw new HttpError(401, "Not signed in");
             // The back-office answers 404 to everyone else, so its existence isn't advertised.
             if (
@@ -473,8 +492,10 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
               now,
               ip: req.ip,
               userAgent: req.headers["user-agent"] ?? null,
+              twoFactorPending: !!caller?.twoFactorPending,
               session: {
                 token: caller?.sessionToken,
+                tokenHash: caller?.tokenHash ?? null,
                 start: async (userId, orgId) => {
                   setSessionCookie(
                     reply,
@@ -523,6 +544,13 @@ export async function buildServer(app: App): Promise<FastifyInstance> {
               await route.handler({ params, query, body: req.body, now } as never),
             );
           const caller = await authenticate(req);
+          if (caller?.twoFactorPending)
+            throw new HttpError(
+              401,
+              "Enter your two-factor code to continue",
+              undefined,
+              "two_factor_required",
+            );
           if (!caller) throw new HttpError(401, "Not signed in");
           const membership = activeMembership(req, caller);
           if (!membership) throw new HttpError(403, "No workspace — finish onboarding first");
